@@ -74,6 +74,10 @@ TODO: 具体格式
 ### VQA数据集
 CVD2014, KoVNiD-1k, LIVE-VQC, Youtube-UGC, LSVQ  
 TODO  
+### PCQA数据集
+WPC、SJTU-PQA、M-PCCD、IRPC  
+#### WPC
+Waterloo Point Cloud，滑铁卢大学发的一个比较大的彩色点云质量评估数据集，对应论文Perceptual Quality Assessment of Colored 3D Point Clouds（2021）  
 
 # 一些研究的思路
 模拟人类视觉更关注图片重点内容，显著的区域质量重点处理。ROI (Region of Interest, 感兴趣区域)  
