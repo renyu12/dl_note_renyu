@@ -1,4 +1,12 @@
 # Copyright (c) 2023, Tri Dao, Albert Gu.
+# renyu: 这个文件说是Selective SSM结构（即S6）实现的代码，在Mamba类的Forward前向传播中调用
+#        定义了4个方法，但其实是selective_scan和mamba_inner两种
+#        只是为这2种方法分别写了参考对照的ref版本，我理解是没有优化但易读的版本，写了测试代码去测试正式版和ref版方法
+#        分别说明下：
+#        selective_scan_fn（实现S6中输出y的计算，使用selective_scan_cuda的CUDA加速版本，没开fused kernel加速计算S6最后一步会调用）
+#        selective_scan_ref（实现S6中输出y的计算的易读版本，仅参考）
+#        mamba_inner_fn（实现S6完整计算，使用selective_scan_cuda的CUDA加速版本，开了fused kernel加速会调用）
+#        mamba_inner_ref（实现S6完整计算的易读版本，仅参考）
 
 import torch
 import torch.nn.functional as F
@@ -307,7 +315,7 @@ def mamba_inner_fn(
                               out_proj_weight, out_proj_bias,
                               A, B, C, D, delta_bias, B_proj_bias, C_proj_bias, delta_softplus)
 
-
+# renyu: S6计算的易读版本，最后面y输出计算省略掉调用selective_scan了
 def mamba_inner_ref(
     xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
     out_proj_weight, out_proj_bias,
@@ -318,7 +326,7 @@ def mamba_inner_ref(
     delta_rank = delta_proj_weight.shape[1]
     d_state = A.shape[-1] * (1 if not A.is_complex() else 2)
     x, z = xz.chunk(2, dim=1)
-    x = causal_conv1d_fn(x, rearrange(conv1d_weight, "d 1 w -> d w"), conv1d_bias, "silu")
+    x = causal_conv1d_fn(x, rearrange(conv1d_weight, "d 1 w -> d w"), conv1d_bias, "silu") # renyu: 1d卷积用的causal_conv1d库的非CUDA方法
     # We're being very careful here about the layout, to avoid extra transposes.
     # We want delta to have d as the slowest moving dimension
     # and L as the fastest moving dimension, since those are what the ssm_scan kernel expects.

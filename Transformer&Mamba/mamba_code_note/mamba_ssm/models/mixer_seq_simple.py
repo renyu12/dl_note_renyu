@@ -1,4 +1,8 @@
 # Copyright (c) 2023, Albert Gu, Tri Dao.
+# renyu: 使用mamba block搭建mamba模型的代码
+#        定义了两个类MixerModel和MambaLMHeadModel
+#        MixerModel类就是基础的mamba网络，由多个mamba block堆叠，还可以选择加入归一化层normalization
+#        MambaLMHeadModel类就是基于Mamba的语言模型，language model head一般指将语言模型的输出转换为特定格式的层，所以这里就是基础的mamba网络加了个全连接层输出
 
 import math
 from functools import partial
@@ -20,7 +24,7 @@ try:
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 
-
+# renyu: 封装了下生成一个mamba block的代码，创建Block类实例（注意看其中的Mixer是就是Mamba类实例），不直接操作Block类了
 def create_block(
     d_model,
     ssm_cfg=None,
@@ -51,6 +55,7 @@ def create_block(
 
 
 # https://github.com/huggingface/transformers/blob/c28d04e9e252a1a099944e325685f14d242ecdcd/src/transformers/models/gpt2/modeling_gpt2.py#L454
+# renyu: 初始化模型权重？看这里带了个URL是GPT2的初始化权重代码，不知道是不是借鉴了
 def _init_weights(
     module,
     n_layer,
@@ -82,7 +87,7 @@ def _init_weights(
                 with torch.no_grad():
                     p /= math.sqrt(n_residuals_per_layer * n_layer)
 
-
+# renyu: 基础的mamba网络模型类
 class MixerModel(nn.Module):
     def __init__(
         self,
@@ -102,6 +107,7 @@ class MixerModel(nn.Module):
         super().__init__()
         self.residual_in_fp32 = residual_in_fp32
 
+        # renyu: mamba网络应该直接用的pytorch的默认词向量化方法
         self.embedding = nn.Embedding(vocab_size, d_model, **factory_kwargs)
 
         # We change the order of residual and layer norm:
@@ -109,11 +115,13 @@ class MixerModel(nn.Module):
         # Add -> LN -> Attn / MLP / Mixer, returning both the residual branch (output of Add) and
         # the main branch (output of MLP / Mixer). The model definition is unchanged.
         # This is for performance reason: we can fuse add + layer_norm.
+        # renyu: 这里我理解是有个add层 norm层计算的优化，为了性能考虑可以add+norm放在一起做，搞了个标志位控制要不要合起来
         self.fused_add_norm = fused_add_norm
         if self.fused_add_norm:
             if layer_norm_fn is None or rms_norm_fn is None:
                 raise ImportError("Failed to import Triton LayerNorm / RMSNorm kernels")
 
+        # renyu: 初始化时创建多个mamba block
         self.layers = nn.ModuleList(
             [
                 create_block(
@@ -130,6 +138,7 @@ class MixerModel(nn.Module):
             ]
         )
 
+        # renyu: 再加归一化层，其他应该没啥东西了
         self.norm_f = (nn.LayerNorm if not rms_norm else RMSNorm)(
             d_model, eps=norm_epsilon, **factory_kwargs
         )
@@ -142,19 +151,24 @@ class MixerModel(nn.Module):
             )
         )
 
+    # renyu: 分配推理缓存空间的方法应该是开内存给中间变量存储可以加速推理
     def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
         return {
             i: layer.allocate_inference_cache(batch_size, max_seqlen, dtype=dtype, **kwargs)
             for i, layer in enumerate(self.layers)
         }
 
+    # renyu: 整个mamba模型的前向传播方法，给定输入直接返回计算得到的hidden states
     def forward(self, input_ids, inference_params=None):
         hidden_states = self.embedding(input_ids)
         residual = None
+        # renyu: self.layers就是多个mamba block
         for layer in self.layers:
             hidden_states, residual = layer(
                 hidden_states, residual, inference_params=inference_params
             )
+
+        # renyu: 这里和Block类的add&norm优化一样，如果开了fused_add_norm标志位就add&norm一起做，没有就按顺序做
         if not self.fused_add_norm:
             residual = (hidden_states + residual) if residual is not None else hidden_states
             hidden_states = self.norm_f(residual.to(dtype=self.norm_f.weight.dtype))
@@ -172,7 +186,7 @@ class MixerModel(nn.Module):
             )
         return hidden_states
 
-
+# renyu: 基于mamba基础网络做的语言模型
 class MambaLMHeadModel(nn.Module, GenerationMixin):
 
     def __init__(
@@ -207,6 +221,7 @@ class MambaLMHeadModel(nn.Module, GenerationMixin):
             residual_in_fp32=residual_in_fp32,
             **factory_kwargs,
         )
+        # renyu: 除了backbone是mamba网络，就加了个全连接层作为language model head用于转换输出格式
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False, **factory_kwargs)
 
         # Initialize weights and apply final processing
@@ -237,6 +252,7 @@ class MambaLMHeadModel(nn.Module, GenerationMixin):
         CausalLMOutput = namedtuple("CausalLMOutput", ["logits"])
         return CausalLMOutput(logits=lm_logits)
 
+    # renyu: 加载预训练模型和存储训练好模型的方法，参考Transformer库里的各种模型都会实现方便使用，加载是从Hugging Face下载
     @classmethod
     def from_pretrained(cls, pretrained_model_name, device=None, dtype=None, **kwargs):
         config_data = load_config_hf(pretrained_model_name)

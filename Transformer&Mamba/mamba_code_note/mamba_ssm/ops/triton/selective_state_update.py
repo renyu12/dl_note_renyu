@@ -12,6 +12,7 @@ import triton.language as tl
 
 from einops import rearrange, repeat
 
+# renyu: TODO: 这里的计算没有太明白是做什么，似乎是每次递归这里和mamba_inner_fn二选一，需要研究下
 
 @triton.heuristics({"HAS_DT_BIAS": lambda args: args["dt_bias_ptr"] is not None})
 @triton.heuristics({"HAS_D": lambda args: args["D_ptr"] is not None})

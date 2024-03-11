@@ -27,6 +27,10 @@ try:
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 
+# renyu: 这个文件里是mamba block的代码，定义了两个类Mamba和Block
+#        Mamba类就是mamba block的核心部分，参考论文图去看结构
+#        Block类是又封装了一层，是在一个Mixer（这个概念我不太熟，但实际用的时候Mixer初始化为Mamba类实例）的基础上再加Add&Norm（加残差连接和归一化）
+#        完整调用看mixer_seq_simple代码中使用Block搭mamba模型
 
 class Mamba(nn.Module):
     def __init__(
@@ -128,6 +132,7 @@ class Mamba(nn.Module):
             conv_state, ssm_state = self._get_states_from_cache(inference_params, batch)
             if inference_params.seqlen_offset > 0:
                 # The states are updated inplace
+                # renyu: TODO: 这里有个路径没太看懂，是不是有什么存储过的结果就可以调用step方法更新state，然后直接返回结果不需要后面的计算了？
                 out, _, _ = self.step(hidden_states, conv_state, ssm_state)
                 return out
 
@@ -142,6 +147,10 @@ class Mamba(nn.Module):
 
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
         # In the backward pass we write dx and dz next to each other to avoid torch.cat
+        # renyu: 这里说了个前向传播过程中把形状相同的dx和dz并排写入，避免调用torch.cat函数拼接张量造成额外开销（TODO：不懂）
+        # renyu: 下面检查use_fast_path标志位应该是考虑是否做一个计算上的优化
+        #        开启的话会使用fused kernel优化，直接调用封装好的mamba_inner_fn优化方法
+        #        未开启就还是按部就班计算（TODO：分析优化的区别在哪里）
         if self.use_fast_path and inference_params is None:  # Doesn't support outputting the states
             out = mamba_inner_fn(
                 xz,
@@ -235,6 +244,7 @@ class Mamba(nn.Module):
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
 
         # SSM step
+        # renyu: 没有成功导入selective_state_update就一般方法算，导入了用加速版本
         if selective_state_update is None:
             # Discretize A and B
             dt = F.softplus(dt + self.dt_proj.bias.to(dtype=dt.dtype))
@@ -293,7 +303,8 @@ class Mamba(nn.Module):
                 ssm_state.zero_()
         return conv_state, ssm_state
 
-
+# renyu: 内容简单就是Mamba加了残差做了归一化，看好其中的mixer实际初始化为Mamba类实例
+#        这里细节上是做Add和Norm的时候还可以有个fused_add_norm优化操作，可以控制是否开启，可以研究下
 class Block(nn.Module):
     def __init__(
         self, dim, mixer_cls, norm_cls=nn.LayerNorm, fused_add_norm=False, residual_in_fp32=False
