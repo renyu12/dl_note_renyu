@@ -87,7 +87,7 @@ SSM——记忆是拟合。用有限的记忆不断更新对于所有历史数�
 下面按照顺序补充一些学习Mamba的背景知识循序渐进。  
 ### State Space Model 状态空间模型  
 Albert Gu推荐了https://probml.github.io/ssm-book/root.html电子书有点SSM简介  
-这个是很经典的模型了，并不是新的技术。挺多领域都会用到，例如搞控制的同学会比较熟悉，在现代控制理论课中一上来就会学习状态空间模型，深度学习这边属于借鉴，因为发现很多理论搞来搞去比较像是状态空间模型。  
+这个是很经典的模型了，并不是新的技术。是连续时间下表示和分析动态系统的经典数学模型。挺多领域都会用到，例如搞控制的同学会比较熟悉，在现代控制理论课中一上来就会学习状态空间模型，深度学习这边属于借鉴，因为发现很多理论搞来搞去比较像是状态空间模型。  
 具体可以用两个公式表示：  
 $x'(t)=Ax(t)+Bu(t)$  
 $y(t)=Cx(t)+Du(t)$  
@@ -186,8 +186,81 @@ README.md说直接pip install mamba-ssm即可，我不是很成功，卡在build
 但是没太多应用性的东西可以跑起来玩，只有两个评测代码可以跑。一个是evals目录下有跑语言模型评估工具库lm-evaluation-harness的代码，一个是benchmarks目录下有跑推理速度测试的代码。  
   
 ## Mamba与视频  
-### VMamba: Visual State Space Model  
+### 论文整理  
+搜集的思路是  
+* 搜索Vision/Image/Video+Mamba关键字  
+* 从Vision Mamba和VMamba两个基础CV Mamba模型文章查找引用  
+* 从U-Mamba 医学图像分割开坑文章查找引用  
+  
+标题标记方式为 **“首发日期 机构-内容-方向（-重要性）”**  
+由于医学任务数量较多，参考价值有限，先划去降低优先级处理；其他一些类似的任务文章页划去降低优先级处理  
+共计37篇，其中：  
+* 14篇医学相关忽略其中13篇（有一篇轻量化可以看看思路）  
+* 4篇基本模型重点学习（Vmamba、Vision Mamba、Mamba-ND、Local Mamba）  
+核心的是：最初将Mamba用于CV任务的两个奠基模型：Vmamba、Vision Mamba  
+* 9个图像相关任务（9个各不相同很绝，3D分割、去雾、生成、全色图像锐化、重建、分类、目标检测、编辑、超分）  
+* 5篇视频相关（1篇视频生成，1篇手势识别，1篇医学视频分割，2篇视频理解是同一个模型重点看下）  
+* 3篇点云相关（都是点云分割+分类）  
+* 1篇特殊序列（人体动作生成）  
+* 1篇理论（性能测试）  
+  
+#### ~~（24.1.9 多大-医学图像分割Mamba-医学图像分割-开坑）U-Mamba Enhancing Long-range Dependency for Biomedical Image Segmentation~~  
+#### （24.1.17 华科-CV Mamba-基本模型）Vision Mamba Efficient Visual Representation Learning with Bidirectional  
 Mamba的优势在于长上下文，所以针对高分辨率图像/视频的场景应该是有用的，一般模型没办法把整个图像/视频丢进去。  
-已有一些用于CV任务的尝试，包括Vmamba、Vision Mamba  
 我理解用于CV任务的关键是通过扫描等方式，将2D图片转为1D序列送入Mamba网络，后面的模型训练应该没有太大需要调整的。  
-TODO  
+TODO!!!!!    
+#### （24.1.18 国科大-CV Mamba-基本模型）VMamba Visual State Space Model  
+TODO!!!!!  
+比较Vision Mamba和VMamba  
+#### （24.1.25 港科-视频分割Mamba-视频分割-首个视频模型）Vivim a Video Vision Mamba for Medical Video  
+TODO!!!!  
+确认如何视频输入  
+#### ~~（24.2.4 上交-医学图像分割Mamba-医学图像分割）VM-UNet Vision Mamba UNet for Medical Image Segmentation~~  
+#### （24.2.5 港中深-3D图像分割Mamba-3D图像分割）nnMamba 3D Biomedical Image Segmentation, Classification and Landmark Detection with State Space Model  
+#### ~~（24.2.5 意大利理工-对Mamba性能的一些测试-模型测试分析）Is Mamba Capable of In-Context Learning~~  
+#### ~~（24.2.5 中科院深圳-医学图像分割Mamba-医学图像分割）Swin-UMamba Mamba-based UNet with ImageNet-based pretraining~~  
+#### （24.2.6 南京科技大学-图像去雾Mamba-图像去雾）U-shaped Vision Mamba for Single Image Dehazing  
+#### ~~（24.2.7 牛津-医学图像分割Mamba-医学图像分割）Mamba-UNet UNet-Like Pure Visual Mamba for Medical Image Segmentation~~  
+#### （24.2.8 UCLA-多维输入Mamba-基本模型）Mamba-ND Selective State Space Modeling for Multi-Dimensional Data  
+TODO!!!!!  
+确认是否有新的图像/视频输入Mamba方式  
+#### （24.2.8 美团-图像生成Mamba-图像生成）Scalable Diffusion Models with State Space Backbone  
+#### ~~（24.2.11 牛津-医学图像分割Mamba-医学图像分割）Semi-Mamba-UNet Pixel-Level Contrastive Cross-Supervised Visual Mamba-based UNet for Semi-Supervised Medical Image Segmentation~~  
+#### ~~（24.2.13 广州上交AI医疗研究中心-医学图像分割Mamba-医学图像分割）P-Mamba Marrying Perona Malik Diffusion with Mamba for Efficient Pediatric Echocardiographic Left Ventricular Segmentation~~  
+#### （24.2.16 华科-点云分析Mamba-点云处理）PointMamba A Simple State Space Model for Point Cloud Analysis  
+#### ~~（24.2.16 牛津-医学图像分割Mamba-医学图像分割）Weak-Mamba-UNet Visual Mamba Makes CNN and ViT Work Better for Scribble-based Medical Image Segmentation~~  
+#### ~~（24.2.19 中科院-合肥全色图像锐化Mamba-全色图像锐化）Pan-Mamba Effective pan-sharpening with State Space Model~~  
+#### （24.2.23 清华深研院-图像重建Mamba-图像重建）MambaIR A Simple Baseline for Image Restoration with State-Space Model  
+#### （24.2.24 台大-食品图像分类Mamba-图像分类）Res-VMamba Fine-Grained Food Category Visual Classification Using Selective State Space Models with Deep Residual Learning  
+#### （24.3.1 武大-点云分析Mamba-点云处理）Point Could Mamba Point Cloud Learning via SSM  
+#### （24.3.4 阿里-红外小目标检测Mamba-目标检测）MiM-ISTD Mamba-in-Mamba for Efficient Infrared Small Target Detection  
+#### ~~（24.3.6 广州医科大-医学图像分类Mamba-图像分类）MedMamba Vision Mamba for Medical Image Classification~~  
+#### （24.3.8 NEU-图像编辑用了点Mamba-图像编辑）InstructGIE Towards Generalizable Image Editing  
+#### （24.3.8 北大-轻量级医学图像分割Mamba-医学图像分割-轻量级方向好思路）LightM-UNet Mamba Assists in Lightweight UNet for Medical Image Segmentation  
+TODO!!!!  
+分析轻量化的方向  
+#### ~~（24.3.8 港中文-内窥镜运动引导Mamba？-医学很专的方向）Motion-Guided Dual-Camera Tracker for Low-Cost Skill Evaluation of Gastric Endoscopy~~  
+#### ~~（24.3.11 港科大-计算病理学Mamba-医学很专的方向）MambaMIL Enhancing Long Sequence Modeling with Sequence Reordering in Computational Pathology~~  
+#### （24.3.11 上海AI Lab-视频理解Mamba模型-视频理解-第二个视频模型）VideoMamba State Space Model for Efficient Video Understanding  
+TODO!!!!!!  
+确认做的质量如何，是否可以作为代码基础去改进  
+#### （24.3.11 上交-点云分析Mamba-点云处理）Point Mamba A Novel Point Cloud Backbone Based on State Space Model with Octree-Based Ordering Strategy  
+#### （24.3.12 东京大学-视频生成Mamba-视频生成）SSM Meets Video Diffusion Models Efficient Video Generation with Structured State Spaces  
+TODO!!!  
+是否和视频处理任务有关？  
+#### ~~（24.3.12 莫纳什大学-长序列动作生成Mamba-动作生成）Motion Mamba Efficient and Long Sequence Motion Generation with Hierarchical and Bidirectional Selective SSM~~  
+#### ~~（24.3.12 浙大-医学图像分割Mamba-医学图像分割）Large Window-based Mamba UNet for Medical Image Segmentation Beyond Convolution and Self-attention~~  
+#### （24.3.13 西安交通大学-图像超分Mamba-图像超分-改进Vision Mamba）Activating Wider Areas in Image  
+TODO!!!  
+确认改进点  
+#### ~~（24.3.13 中科院成都-医学放射剂量预测Mamba-很专的医学方向）MD-Dose A Diffusion Model based on the Mamba for Radiotherapy Dose Prediction~~  
+#### ~~（24.3.14 南京大学-医学图像分割Mamba-医学图像分割-升级VM-UNET）VM-UNET-V2 Rethinking Vision Mamba UNet for Medical Image Segmentation~~  
+#### （24.3.14 清华深研院-手势识别Mamba-手势识别）MambaTalk Efficient Holistic Gesture Synthesis with Selective State Space Models  
+TODO!!!  
+研究下输入是否和视频相关  
+#### （24.3.14 上海AI Lab-视频理解Mamba套件-视频理解-也是第二个视频模型更多代码）Video Mamba Suite SSM as a Versatile Alternative for Video Understanding  
+TODO!!!!!!  
+确认套件代码能做什么  
+#### （24.3.14 悉尼大学-改Vision Mamba扫描方式-基础模型-改扫描方式这个好思路）LocalMamba Visual State Space Model with Windowed Selective Scan  
+TODO!!!!!  
+了解扫描方式改进的方法
