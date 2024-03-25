@@ -73,9 +73,11 @@ TODO: 也有一些新的可能还没有完全普及作为通用标准，需要�
 TODO: 具体格式  
 ### VQA数据集
 CVD2014, KoVNiD-1k, LIVE-VQC, Youtube-UGC, LSVQ  
+DIVIDE-3k（Weisi Lin老师团队考虑审美分数新建的数据集，3634个训练视频，909个验证视频，每个视频都有审美分数、技术分数和整体分数）
 TODO  
 ### PCQA数据集
 WPC、SJTU-PQA、M-PCCD、IRPC  
+SIAT-PCQD、PointXR，一般点云质量评估是固定观察距离的图片/可旋转视角去评估，这两个是支持6DoF移动观察的
 #### WPC
 Waterloo Point Cloud，滑铁卢大学发的一个比较大的彩色点云质量评估数据集，对应论文Perceptual Quality Assessment of Colored 3D Point Clouds（2021）  
 
@@ -87,3 +89,28 @@ Waterloo Point Cloud，滑铁卢大学发的一个比较大的彩色点云质量
 最小可察觉误差JND，把来自人眼视觉系统特性&心理效应的视觉冗余量化出来，可以指导编码和质量评估  
 结合LLM多模态输入图像给出文本评价的能力，进行质量评估  
 zero shot方法？  
+
+# 论文整理
+## VQA
+### （22.6.6 NTU）FAST-VQA: Efficient End-to-end Video Quality Assessment with Fragment Sampling
+问题：主要解决了VQA中高清视频数据量过大，计算开销高的问题  
+方法：  
+* 网格化补丁采样  
+把原始视频帧按网格分块，然后每一块里原始分辨率采样一个小补丁，不同帧都在相同位置采样这个小补丁。——这样就采样获取了最细节局部纹理信息  
+把所有网格的小补丁拼接在一起组成一个“大补丁”作为输入。——这样就有了个很抽象的全局语义信息（直观感觉有点弱，这都成块了啥也看不出来）  
+* FANet网络  
+backbone用的是4层注意力层的Swin-T网络，但还要做一点调整。主要问题是大补丁毕竟是硬拼起来，小补丁内Intra-patch像素关联强，小补丁之间cross-patch像素关联弱。所以，一是做注意力计算的时候要有所区分，加一个偏差值隔开不同小补丁；二是不能先池化再非线性回归（这是激活函数吗？）会把小补丁混了，顺序改成先非线性回归再池化。  
+
+想法：这样很小的采样又硬拼在一起，相比更早的方法直观感觉是增加了细节纹理的权重、削弱了全局语义的权重，也能取得很好的效果，应该说明了目前的质量评分基本上还是以局部细节纹理为主吧。  
+### （22.11.9 NTU）Exploring Video Quality Assessment on User Generated Contents from Aesthetic And Technical Perspectives
+问题：之前的VQA只关注了技术角度的质量评分  
+方法：  
+* 做了DIVIDE-3k数据集  
+每个视频标签是技术评分+审美评分+整体评分  
+* 提出了DOVER视频质量评估模型  
+就是分了两路分别计算技术评分和审美评分  
+TODO：DOVER具体网络设计，我理解技术分应该还是类似Fast-VQA的处理，审美分主要依赖全局语义可以做下采样，但是提了个Cross-scale Regularization没看懂是什么，不同尺度下采样之间比较吗？  
+### （23.5.22 NTU）Towards Explainable In-the-Wild Video Quality Assessment: A Database and a Language-Prompted Approach
+基于DOVER时搞的DIVIDE-3k数据集，又扩展了评分的维度，本来只有审美评分+技术评分+整体分，又对数据集里4543个视频收集了200w+的文本评价，把这些评价转换成了13个维度的评分。这个数据集确实是个极大的亮点，借助文本语义的信息来解决原本视频质量只有技术评分的问题。  
+提出了MaxVQA，这里的Max指的是多维度。  
+TODO：网络设计需要再看下，技术分还是用了Fast-VQA，其他语义评分的处理用了做多模态的CLIP  

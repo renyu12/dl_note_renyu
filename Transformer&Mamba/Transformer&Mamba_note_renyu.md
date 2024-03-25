@@ -186,6 +186,10 @@ README.md说直接pip install mamba-ssm即可，我不是很成功，卡在build
 但是没太多应用性的东西可以跑起来玩，只有两个评测代码可以跑。一个是evals目录下有跑语言模型评估工具库lm-evaluation-harness的代码，一个是benchmarks目录下有跑推理速度测试的代码。  
   
 ## Mamba与视频  
+### 研究思路  
+Mamba的优势在于长上下文，所以针对高分辨率图像/视频的场景应该是有用的，一般模型没办法把整个图像/视频丢进去，能拿到更多全局信息进行分析。  
+我理解用于CV任务的关键是通过扫描等方式，将2D图片转为1D序列送入Mamba网络，后面的模型训练应该相比做NLP任务没有太大需要调整的。  
+但是2D转1D序列如何保留图像&视频的空间关系？这是个大问题。不像CNN本身卷积核就按空间关系运算的。即使对比ViT的2D转1D方式，由于无法像Transformer一样处理完整的一个上下文窗口，Mamba更接近RNN的迭代会不断遗忘，所以也要有一些方式来弥补空间关系的损失。  
 ### 论文整理  
 搜集的思路是  
 * 搜索Vision/Image/Video+Mamba关键字  
@@ -205,16 +209,22 @@ README.md说直接pip install mamba-ssm即可，我不是很成功，卡在build
 * 1篇理论（性能测试）  
   
 #### ~~（24.1.9 多大-医学图像分割Mamba-医学图像分割-开坑）U-Mamba Enhancing Long-range Dependency for Biomedical Image Segmentation~~  
+图像分割常用的网络U-Net其实很值得学习下，简单理解其核心思想是Encoder是多层下采样获得特征，Decoder是逆过来多层上采样恢复出语义分割图（一般都是4层），而Decoder每一层的输入不仅是上一层，而且加入Encoder中同层的输入，解决了下/上采样中带来的一些损失效果很好。  
 #### （24.1.17 华科-CV Mamba-基本模型）Vision Mamba Efficient Visual Representation Learning with Bidirectional  
-Mamba的优势在于长上下文，所以针对高分辨率图像/视频的场景应该是有用的，一般模型没办法把整个图像/视频丢进去。  
-我理解用于CV任务的关键是通过扫描等方式，将2D图片转为1D序列送入Mamba网络，后面的模型训练应该没有太大需要调整的。  
+训练是在ImageNet-1k分类数据集上预训练，然后在不同具体任务的数据集上微调（包括语义分割、目标检测、实例分割）  
+对标的是DeiT，性能提升其实不太明显，但是差不多同性能跑1248\*1248的图像任务（6084个token，8卡A800服务器），可以节省86.8%的显存，速度上也快了2.8倍。  
+用的是双向mamba块加position embedding的方法，代码没太细细研究大致看了下，是基于mamba1.1.1版本改了下block结构分两路做正反向的扫描，后续使用还是直接block堆叠挺清楚的。  
 TODO!!!!!    
 #### （24.1.18 国科大-CV Mamba-基本模型）VMamba Visual State Space Model  
 TODO!!!!!  
-比较Vision Mamba和VMamba  
+比较Vision Mamba和VMamba，二者基本的通过扫描的方式将2D图像转1D序列并保持2D图像位置关系信息的思路应该差不多。  
+但是VMamba似乎做的更复杂一些。网络架构上，VMamba是比较特殊的，没有保持原本Mamba网络的架构（统一的Mamba块堆叠）。首先是也改了扫描方式，对于一个patch都不是简单扫描一遍展开了，而是搞了CSM（交叉扫描）从左上角行、左上角列、右下角行、右下角列扫了4遍，所以用了4倍内存但是应该空间信息会更多一些。TODO：这里代码我没太看懂……对于各个patch是怎么处理的？然后结合S6加上卷积啥的合成一个VSS Block。然后模型是用了4层的VSS Block，每一层都会有下采样使得特征的尺寸不断缩小。这里的做法我开始很不理解，后面感觉是和U-Net比较相似的网络结构，应该是搞图像分割的比较熟悉。  
+看起来VMamba比VMamba的引用和代码star都要略少一点点。  
 #### （24.1.25 港科-视频分割Mamba-视频分割-首个视频模型）Vivim a Video Vision Mamba for Medical Video  
 TODO!!!!  
-确认如何视频输入  
+TODO：确认如何视频输入（应该就是扩展到时域之后3D扫描）  
+应该是和VMamba那种U-Net结构比较相似，用Mamba块做了4层降采样的方式。  
+只用Mamba做了Encoder，Decoder部分就是直接轻量级CNN做的。TODO：为什么不用Mamba做Decoder？  
 #### ~~（24.2.4 上交-医学图像分割Mamba-医学图像分割）VM-UNet Vision Mamba UNet for Medical Image Segmentation~~  
 #### （24.2.5 港中深-3D图像分割Mamba-3D图像分割）nnMamba 3D Biomedical Image Segmentation, Classification and Landmark Detection with State Space Model  
 #### ~~（24.2.5 意大利理工-对Mamba性能的一些测试-模型测试分析）Is Mamba Capable of In-Context Learning~~  
@@ -243,7 +253,19 @@ TODO!!!!
 #### ~~（24.3.11 港科大-计算病理学Mamba-医学很专的方向）MambaMIL Enhancing Long Sequence Modeling with Sequence Reordering in Computational Pathology~~  
 #### （24.3.11 上海AI Lab-视频理解Mamba模型-视频理解-第二个视频模型）VideoMamba State Space Model for Efficient Video Understanding  
 TODO!!!!!!  
-确认做的质量如何，是否可以作为代码基础去改进  
+TODO：确认做的质量如何，是否可以作为代码基础去改进？（目前认为是可以的）  
+分析了Vision Mamba和VMamba，认为Vmamba做了降采样是不标准的，坚持按照ViT的模型就是直接堆叠不做降采样。说和Vision Mamba的实现补交相似，有一些细节简化，包括中间的[cls] token认为不需要，rotary position embedding不需要。（TODO：为什么）  
+实现原理上也确实比较直接没太多可说的，还是加上时域3D双向扫描，不过讨论了下扫描的方式，看是先空域再时域、先时域再空域、正向先空域再时域反向反过来、扫四遍正向反向先时域先空域都跑，最后结论是简单的先空域再时域就挺好的，这个结论我很喜欢。  
+还有个性能上的创新点说是参考了UMT做了Mask Modeling。（TODO：这个我没有看懂……）  
+文章写法上没有特别去强调模型创新性，毕竟Vision Mamba已经有了，扩展到Video也并没有什么本质上的创新。但文章很出彩的地方是实验做的不错很全面，强调了VideoMamba开创性工作的意义是实验证明了Mamba在视频任务中的四个优势，分了四个部分实验来说明  
+* 1.证明VideoMamba可以扩大规模  
+首先跑了ImageNet-1K效果不错，并且使用了自蒸馏的方式用小模型去辅助微调更大的模型，以此证明VideoMamba性能不错并且可以扩大规模。（TODO：小模型辅助大模型训练的方法可以学习下，只听说过大模型蒸馏小模型）  
+* 2.证明VideoMamba对短视频敏感性好  
+跑了短视频理解数据集Kinetics-400和Something-Something V2。  
+* 3.证明VideoMamba对长视频理解潜力大  
+跑了长视频理解数据集Breakfast、COIN、LVU。可以小参数量跑到SOTA。  
+* 4.证明VideoMamba还兼容多模态  
+跑了视频-文本的5个多模态数据集也不错。  
 #### （24.3.11 上交-点云分析Mamba-点云处理）Point Mamba A Novel Point Cloud Backbone Based on State Space Model with Octree-Based Ordering Strategy  
 #### （24.3.12 东京大学-视频生成Mamba-视频生成）SSM Meets Video Diffusion Models Efficient Video Generation with Structured State Spaces  
 TODO!!!  
@@ -263,4 +285,27 @@ TODO!!!!!!
 确认套件代码能做什么  
 #### （24.3.14 悉尼大学-改Vision Mamba扫描方式-基础模型-改扫描方式这个好思路）LocalMamba Visual State Space Model with Windowed Selective Scan  
 TODO!!!!!  
-了解扫描方式改进的方法
+了解扫描方式改进的方法  
+  
+### 代码  
+#### Video Mamba  
+源码部署测试中，还未能确认成功……  
+一些问题记录下：  
+* 基本环境  
+Torch 2.1.2 CUDA11.8 要装好Mamba  
+* apex==0.1包安装  
+这个包是PyTorch用NIVDIA显卡做混合精度&多卡并行的扩展库  
+这个包直接pip安装似乎是不行，没有对应版本……可以到github下载源码然后安装似乎就是0.1版本  
+  
+```  
+git clone https://github.com/NVIDIA/apex  
+cd apex  
+# if pip >= 23.1  
+pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --config-settings "--build-option=--cpp_ext" --config-settings "--build-option=--cuda_ext" ./  
+# pip < 23.1  
+pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --global-option="--cpp_ext" --global-option="--cuda_ext" ./  
+```  
+* skimage=0.0包安装  
+应该是requirements.txt文件里写错了，这个包是scikit-image  
+  
+由于提供的原代码是在多显卡的服务器上通过srun提交训练任务，并且搭配了ImageNet-1k、Kinetics-400这些比较大的数据集，没能直接跑起来，后续还是需要读代码看下如何单GPU运行并且跑样本做推理测试，以及如何做的预训练和微调。
