@@ -3,6 +3,7 @@
 """
 A script to run multinode training with submitit.
 """
+# renyu: 使用submitit向服务器提交训练任务，和蒸馏模式的区别在于这里调用的是main.py
 import argparse
 import os
 import uuid

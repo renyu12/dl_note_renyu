@@ -1,5 +1,8 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
+# renyu: Videomamba的主流程代码基础是Facebook的DeiT代码，DeiT真是写的不错的高质量代码
+#        VideoMamba这里其实都没咋改，这就导致比较坑的是有不需要的DeiT代码也没有移除，但实际上和VideoMamba关联不大
+#        需要对照DeiT代码阅读看VideoMamba改动的部分比较重要
 import argparse
 import os
 import datetime
@@ -11,17 +14,18 @@ import json
 
 from pathlib import Path
 
-from timm.data import Mixup
+# renyu: timm是pytorch的图像模型库pytorch image models
+from timm.data import Mixup    # renyu: Mixup混类数据增强
 from timm.models import create_model
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy    # renyu: 基础的常用损失函数，可以参数自己选择
 from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler, get_state_dict, ModelEma
 
-from datasets import build_dataset
-from engine import train_one_epoch, evaluate, evaluate_ema
-from losses import DistillationLoss
-from samplers import RASampler
+from datasets import build_dataset    # renyu: 用于加载图像数据集的代码
+from engine import train_one_epoch, evaluate, evaluate_ema    # renyu: 训练和评估模型的代码
+from losses import DistillationLoss    # renyu: 做模型蒸馏时可以把损失函数改为teacher模型和student模型之间的误差
+from samplers import RASampler    # renyu: 专门写的做了重复增强的一个分布式采样器
 from augment import new_data_aug_generator
 
 import contextlib
@@ -29,7 +33,7 @@ import contextlib
 import models
 import utils
 
-
+# renyu: 解析各种输入参数，可以设置一些模型超参数，做的是真全面
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
@@ -204,29 +208,38 @@ def get_args_parser():
 
 
 def main(args):
+    # renyu: 分布式训练的时候初始化rank、world_size这些环境变量
     utils.init_distributed_mode(args)
 
     print(args)
 
+    # renyu: 检查蒸馏模式参数是否正确，开了蒸馏不能开finetune，不能开评估模式
     if args.distillation_type != 'none' and args.finetune and not args.eval:
         raise NotImplementedError("Finetuning with distillation not yet supported")
 
+    # renyu: 创建设备对象，cpu/cuda
     device = torch.device(args.device)
 
+    # renyu: 固定随机数种子以便复现
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
     # random.seed(seed)
 
+    # renyu: 开启cndnn自动算法优化
     cudnn.benchmark = True
 
+    # renyu: 根据输入参数选择数据集创建实例
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
+    # renyu: 初始化数据loader中的采样器sampler
+    # renyu: 如果是分布式训练就要用分布式的sampler
     if args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
+        # renyu: 开启repeated增强之后使用专门写的RASampler，未开启使用torch自带的DistributedSampler
         if args.repeated_aug:
             sampler_train = RASampler(
                 dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
@@ -244,10 +257,12 @@ def main(args):
                 dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False)
         else:
             sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+    # renyu: 不分布式训练就用普通的sampler
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
         sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
+    # renyu: 使用数据loader加载训练数据方便分batch
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
         batch_size=args.batch_size,
@@ -259,6 +274,7 @@ def main(args):
     if args.ThreeAugment:
         data_loader_train.dataset.transform = new_data_aug_generator(args)
 
+    # renyu: 使用数据loader加载验证数据
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
         batch_size=int(1.5 * args.batch_size),
@@ -268,6 +284,7 @@ def main(args):
         persistent_workers=True
     )
 
+    # renyu: 如果开启了mixup数据增强就创建Mixup类实例准备操作
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
     if mixup_active:
@@ -276,6 +293,7 @@ def main(args):
             prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
+    # renyu: 根据输入参数选择创建对应的模型，代码在models目录下每个model都写了@register_model装饰器
     print(f"Creating model: {args.model}")
     model = create_model(
         args.model,
@@ -286,7 +304,10 @@ def main(args):
         drop_block_rate=None,
         img_size=args.input_size,
     )
-                    
+                
+    # renyu: 如果是做预训练模型微调，则加载指定的预训练模型，根据模型配置设定好参数      
+    #        看了下启动脚本，是在训练高分辨输入448*448或者576*576输入模型的时候，使用224*224上训练的模型微调
+    #        所以这里的微调特制更改模型输入时的微调，和蒸馏区分开          
     if args.finetune:
         if args.finetune.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
@@ -325,9 +346,11 @@ def main(args):
 
         msg = model.load_state_dict(checkpoint_model, strict=False)
         print(msg)
-            
+    
+    # renyu: 将模型加载到设备上
     model.to(device)
 
+    # renyu: 如果要做指数移动平均ema处理创建实例
     model_ema = None
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
@@ -337,6 +360,7 @@ def main(args):
             device='cpu' if args.model_ema_force_cpu else '',
             resume='')
 
+    # renyu: 如果是分布式训练做下处理
     model_without_ddp = model
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
@@ -344,11 +368,14 @@ def main(args):
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
+    # renyu: TODO: 这里设置了个默认的优化器unscale_lr参数不知道做啥的，应该是和学习率调整有关
     if not args.unscale_lr:
         linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
         args.lr = linear_scaled_lr
+    # renyu: 按参数创建优化器
     optimizer = create_optimizer(args, model_without_ddp)
     
+    # renyu: AMP自动混合精度训练处理，用半精度的bf/float16做一些计算省内存、加速运算
     # amp about
     amp_autocast = contextlib.nullcontext()
     loss_scaler = "none"
@@ -358,8 +385,10 @@ def main(args):
         amp_autocast = torch.cuda.amp.autocast(dtype=dtype)
         loss_scaler = NativeScaler()
 
+    # renyu: 设置学习率scheduler和训练轮数
     lr_scheduler, args.epochs = create_scheduler(args, optimizer)
 
+    # renyu: 根据参数设置损失函数，默认是标签平滑交叉熵
     criterion = LabelSmoothingCrossEntropy()
 
     if mixup_active:
@@ -373,6 +402,7 @@ def main(args):
     if args.bce_loss:
         criterion = torch.nn.BCEWithLogitsLoss()
         
+    # renyu: 根据参数设置蒸馏模式，并且加载teacher模型
     teacher_model = None
     if args.distillation_type != 'none':
         assert args.teacher_path, 'need to specify teacher-path when using distillation'
@@ -392,13 +422,16 @@ def main(args):
         teacher_model.to(device)
         teacher_model.eval()
 
+    # renyu: 蒸馏模式下要把损失函数换一下
     # wrap the criterion in our custom DistillationLoss, which
     # just dispatches to the original criterion if args.distillation_type is 'none'
     criterion = DistillationLoss(
         criterion, teacher_model, args.distillation_type, args.distillation_alpha, args.distillation_tau
     )
 
+    # renyu: 设置输出目录
     output_dir = Path(args.output_dir)
+    # renyu: TODO: 这里应该是开启了从蒸馏模型中加载的参数后，会有一些加载预训练模型的处理，不太了解怎么用的
     if args.load_from_distill is not None:
         checkpoint = torch.load(args.load_from_distill, map_location='cpu')
         print("Load from distillation")
@@ -423,6 +456,7 @@ def main(args):
                 loss_scaler = 'none'
         lr_scheduler.step(args.start_epoch)
 
+    # renyu: 如果是有训练了一些的模型要恢复，也是根据参数加载进来；没有的话会默认调整恢复参数为当前模型的存储结果
     if args.resume == '':
         tmp = f"{args.output_dir}/checkpoint.pth"
         if os.path.exists(tmp):
@@ -447,6 +481,7 @@ def main(args):
                 loss_scaler = 'none'
         lr_scheduler.step(args.start_epoch)
         
+    # renyu: 如果是以模型评估模式运行的，则执行evaluate评估函数，完成后直接结束程序
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device, amp_autocast)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
@@ -456,6 +491,7 @@ def main(args):
             print(f"EMA Accuracy of the network on the {len(dataset_val)} test images: {test_stats_ema['acc1']:.1f}%")
         return
 
+    # renyu: 开始训练，记录时间，准备记录准确率
     print(f"Start training for {args.epochs} epochs")
     print(f"Use for {args.cooldown_epochs} epochs with min_lr")
     start_time = time.time()
@@ -464,6 +500,7 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
 
+        # renyu: 调用train_one_epoch函数跑一轮训练
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler, amp_autocast,
@@ -472,6 +509,7 @@ def main(args):
             args=args, 
         )
 
+        # renyu： scheduler更新学习率，记录当前模型到输出目录的checkpoint
         lr_scheduler.step(epoch)
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
@@ -486,12 +524,15 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
+        # renyu: 调用evaluate函数评估本轮训练后的模型
         test_stats = evaluate(data_loader_val, model, device, amp_autocast)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
 
+        # renyu: 如果准确率增加更新最大准确率
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print('Max accuracy: {:.2f}%'.format(max_accuracy))
         
+        # renyu: 如果当前是最好的准确率，保存模型到输出目录的best_checkpoint
         if max_accuracy == test_stats["acc1"]:
             if args.output_dir:
                 checkpoint_paths = [output_dir / 'best_checkpoint.pth']
@@ -506,6 +547,7 @@ def main(args):
                         'args': args,
                     }, checkpoint_path)
 
+        # renyu: 训练n轮之后也保存一个存档
         if (epoch + 1) % args.save_freq == 0:
             if args.output_dir:
                 checkpoint_paths = [output_dir / f'checkpoint_e{epoch+1}.pth']
@@ -520,6 +562,7 @@ def main(args):
                         'args': args,
                     }, checkpoint_path)
 
+        # renyu: 记录训练日志
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
@@ -529,11 +572,13 @@ def main(args):
             with (output_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
+    # renyu: 所有轮训练结束，统计耗时
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
 
 
+# renyu: 执行的时候就是读下运行参数，创建输出目录，然后就进main函数了
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DeiT training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()

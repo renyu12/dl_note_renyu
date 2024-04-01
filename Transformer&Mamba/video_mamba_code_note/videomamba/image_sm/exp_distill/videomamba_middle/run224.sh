@@ -10,6 +10,7 @@ echo "PYTHONPATH: ${PYTHONPATH}"
 JOB_NAME='videomamba_middle_res224'
 OUTPUT_DIR="$(dirname $0)"
 
+# renyu: 模型蒸馏模式，从已经训练好的小模型蒸馏得到大模型，这里是small指导middle
 python run_with_submitit_distill.py \
     --root_dir_train your_imagenet_path/train/ \
     --meta_file_train your_imagenet_path/meta/train.txt \

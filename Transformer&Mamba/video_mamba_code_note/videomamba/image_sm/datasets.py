@@ -11,7 +11,7 @@ from timm.data import create_transform
 
 from imagenet_dataset import ImageNetDataset
 
-
+# renyu: 加载INat动物图像分类数据集的类
 class INatDataset(ImageFolder):
     def __init__(self, root, train=True, year=2018, transform=None, target_transform=None,
                  category='name', loader=default_loader):
@@ -54,7 +54,7 @@ class INatDataset(ImageFolder):
 
     # __getitem__ and __len__ inherited from ImageFolder
 
-
+# renyu: 对外API，可以根据数据集请求返回对应的数据集类实例，除了自己写的INat类，还有pytorch默认支持的CIFAR、IMNET
 def build_dataset(is_train, args):
     transform = build_transform(is_train, args)
 

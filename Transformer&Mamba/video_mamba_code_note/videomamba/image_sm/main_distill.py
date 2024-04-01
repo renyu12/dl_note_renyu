@@ -1,5 +1,8 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
+# renyu: 主要注释写在main.py了，这里是蒸馏模式的main_distill函数，对比main基本区别不大，只是多创建了teacher_model来指导训练
+#        这里有一个巨坑的点，因为main.py基础是DeiT的代码，本身就针对于模型蒸馏有支持，但实际都没有使用，另外写了个main_distill来跑蒸馏模式
+#        这样太不优雅了，也给初学者阅读带来极大的困惑……是在一个代码中没调通就另外写的吗……
 import argparse
 import os
 import datetime
@@ -281,6 +284,7 @@ def main(args):
         teacher_embed_dim=args.teacher_embed_dim,
         model_type="student",
     )
+    # renyu: 和main的主要区别就在这里，创建了teacher_model
     print(f"Creating teacehr model: {args.model}")
     teacher_model = create_model(
         args.teacher_model,

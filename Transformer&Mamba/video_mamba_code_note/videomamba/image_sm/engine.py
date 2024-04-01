@@ -15,7 +15,7 @@ from losses import DistillationLoss
 import torch.distributed as dist
 import utils
 
-
+# renyu: 进行一轮训练，除了基本的pytorch训练流程，还支持了做ema、日志等操作
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, amp_autocast, max_norm: float = 0,
@@ -98,6 +98,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+# renyu: 评估的函数，直接计算在验证集上的TOP1、TOP5分类正确率以及交叉熵损失函数
 @torch.no_grad()
 def evaluate(data_loader, model, device, amp_autocast):
     criterion = torch.nn.CrossEntropyLoss()

@@ -6,7 +6,7 @@ Implements the knowledge distillation loss
 import torch
 from torch.nn import functional as F
 
-
+# renyu: 模型蒸馏时用到损失函数，以teacher模型的输出作为标签，指导student模型做监督学习
 class DistillationLoss(torch.nn.Module):
     """
     This module wraps a standard criterion and adds an extra knowledge distillation loss by
@@ -35,6 +35,7 @@ class DistillationLoss(torch.nn.Module):
         if not isinstance(outputs, torch.Tensor):
             # assume that the model outputs a tuple of [outputs, outputs_kd]
             outputs, outputs_kd = outputs
+        # renyu: 蒸馏模式是none的时候直接用基本的损失函数
         base_loss = self.base_criterion(outputs, labels)
         if self.distillation_type == 'none':
             return base_loss
@@ -47,6 +48,7 @@ class DistillationLoss(torch.nn.Module):
         with torch.no_grad():
             teacher_outputs = self.teacher_model(inputs)
 
+        # renyu: 蒸馏模式是软蒸馏的时候，目标是让两个模型的预测分布接近，用的是KL散度
         if self.distillation_type == 'soft':
             T = self.tau
             # taken from https://github.com/peterliht/knowledge-distillation-pytorch/blob/master/model/net.py#L100
@@ -63,6 +65,7 @@ class DistillationLoss(torch.nn.Module):
             #We divide by outputs_kd.numel() to have the legacy PyTorch behavior. 
             #But we also experiments output_kd.size(0) 
             #see issue 61(https://github.com/facebookresearch/deit/issues/61) for more details
+        # renyu: 蒸馏模式是硬蒸馏的时候，目标是让两个模型的预测结果接近，用的是交叉熵
         elif self.distillation_type == 'hard':
             distillation_loss = F.cross_entropy(outputs_kd, teacher_outputs.argmax(dim=1))
 

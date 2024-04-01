@@ -4,7 +4,8 @@ import torch
 import torch.distributed as dist
 import math
 
-
+# renyu: TODO: 看不太懂，大概是个基于pytorch自带的DistributedSampler写的分布式采样器
+#              增加了重复增强repeated augmentation
 class RASampler(torch.utils.data.Sampler):
     """Sampler that restricts data loading to a subset of the dataset for distributed,
     with repeated augmentation.

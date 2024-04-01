@@ -15,6 +15,7 @@ NNODE=1
 NUM_GPUS=8
 NUM_CPU=128
 
+# renyu: 训练最核心的small 224*224模型，用的8卡服务器srun提交的
 srun --mpi=pmi2 \
     -p ${PARTITION} \
     -n${NNODE} \
