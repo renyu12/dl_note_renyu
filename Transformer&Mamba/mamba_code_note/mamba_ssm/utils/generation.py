@@ -13,7 +13,8 @@ from torch import Tensor
 from torch.profiler import ProfilerActivity, profile, record_function
 from transformers.generation import GreedySearchDecoderOnlyOutput, SampleDecoderOnlyOutput, TextStreamer
 
-
+# renyu: TODO: 这个类看名字是推理参数，在Mamba块S6运算判断是走step还是selective_scan的时候作为条件
+#              不知道是怎么输入的，是否是在推理过程中使用？
 @dataclass
 class InferenceParams:
     """Inference parameters that are passed to the main model in order
@@ -240,7 +241,7 @@ def decode(
     output_cls = GreedySearchDecoderOnlyOutput if top_k == 1 else SampleDecoderOnlyOutput
     return output_cls(sequences=torch.cat(sequences, dim=1), scores=tuple(scores))
 
-
+# renyu: 核心定义的是这个类，示例Mamba大语言模型MambaLMHeadModel就是以此为基类
 class GenerationMixin:
     def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
         raise NotImplementedError

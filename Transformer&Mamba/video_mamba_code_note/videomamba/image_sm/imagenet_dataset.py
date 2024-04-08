@@ -1,3 +1,4 @@
+# renyu: 非DeiT直接用torchvision.datasets加载ImageNet的方式，自己另外搞的库文件，可能是有一些格式上的处理问题
 import os.path as osp
 import json
 import requests

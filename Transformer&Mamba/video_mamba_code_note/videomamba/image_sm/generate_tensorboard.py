@@ -1,3 +1,4 @@
+# renyu: 读取模型的日志，然后画tensorboard图表展示效果的脚本
 import os
 import json
 from tensorboardX import SummaryWriter

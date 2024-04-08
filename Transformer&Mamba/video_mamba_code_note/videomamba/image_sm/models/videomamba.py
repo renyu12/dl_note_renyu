@@ -1,5 +1,6 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
+# renyu: 用于图像分类任务的VideoMamba模型代码
 import torch
 import torch.nn as nn
 from functools import partial
@@ -23,11 +24,13 @@ except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 
 
+# renyu: 输入层处理，2D图像转Patch Embedding分块并向量化作为1D输入，基本没啥特别操作
 class PatchEmbed(nn.Module):
     """ 2D Image to Patch Embedding
     """
     def __init__(self, img_size=224, patch_size=16, stride=16, in_chans=3, embed_dim=768, norm_layer=None, flatten=True):
         super().__init__()
+        # renyu: 先分块，就是按指定patch大小、步长、图像大小去分割，默认是224*224，补丁16*16，彩色3通道，所以得到14*14个补丁，一个补丁向量化后是768维
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         self.img_size = img_size
@@ -50,7 +53,7 @@ class PatchEmbed(nn.Module):
         x = self.norm(x)
         return x
 
-
+# renyu: 就是Mamba Block，我还看了下为啥不用Mamba源码的Block，这里就是多了个drop_path操作，其他完全一致
 class Block(nn.Module):
     def __init__(
         self, dim, mixer_cls, norm_cls=nn.LayerNorm, fused_add_norm=False, residual_in_fp32=False,drop_path=0.,
@@ -183,7 +186,7 @@ def segm_init_weights(m):
         nn.init.constant_(m.bias, 0)
         nn.init.constant_(m.weight, 1.0)
 
-
+# renyu: VisionMamba的模型代码，好好看看这里的网络结构
 class VisionMamba(nn.Module):
     def __init__(
             self, 
@@ -220,7 +223,7 @@ class VisionMamba(nn.Module):
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim))
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim))    # renyu: 这是位置编码向量
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
@@ -278,14 +281,18 @@ class VisionMamba(nn.Module):
     def load_pretrained(self, checkpoint_path, prefix=""):
         _load_weights(self, checkpoint_path, prefix)
 
+    # renyu: 整个模型除最后输出层分类之外前向传播的流程，重要
     def forward_features(self, x, inference_params=None):
+        # renyu: 先2D图像输入embedding转1D
         x = self.patch_embed(x)
         cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_token, x), dim=1)
 
+        # renyu: 位置编码在这里，直接加到embedding上
         x = x + self.pos_embed
-        x = self.pos_drop(x)
+        x = self.pos_drop(x)    # renyu: 输入还带了dropout随机丢一些位置
 
+        # renyu: 这一部分基本就是Mamba原版的正向传播处理，应该就是多加了drop_path操作
         # mamba impl
         residual = None
         hidden_states = x
@@ -316,12 +323,13 @@ class VisionMamba(nn.Module):
         # return only cls token
         return hidden_states[:, 0, :]
 
+    # renyu: 整个模型前向传播的流程，head就是个分类用的全连接层，再细看forward_features
     def forward(self, x, inference_params=None):
         x = self.forward_features(x, inference_params)
         x = self.head(x)
         return x
 
-
+# renyu: 各个size模型的配置，脚本运行的时候参数指定模型的size就会匹配这里
 @register_model
 def videomamba_tiny(pretrained=False, **kwargs):
     model = VisionMamba(

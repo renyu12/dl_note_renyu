@@ -171,6 +171,8 @@ def segm_init_weights(m):
         nn.init.constant_(m.weight, 1.0)
 
 
+# renyu: 这里做的还是按2D图像的Embedding，也是很简单没啥特别处理的
+#        典型例子是一个16高*16宽*3通道patch展平
 class PatchEmbed(nn.Module):
     """ Image to Patch Embedding
     """
@@ -314,13 +316,13 @@ class VisionMamba(nn.Module):
 
         cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_token, x), dim=1)
-        x = x + self.pos_embed
+        x = x + self.pos_embed    # renyu: 空域位置编码
 
         # temporal pos
         cls_tokens = x[:B, :1, :]
         x = x[:, 1:]
         x = rearrange(x, '(b t) n m -> (b n) t m', b=B, t=T)
-        x = x + self.temporal_pos_embedding
+        x = x + self.temporal_pos_embedding    # renyu: 时域位置编码
         x = rearrange(x, '(b n) t m -> b (t n) m', b=B, t=T)
         x = torch.cat((cls_tokens, x), dim=1)
 

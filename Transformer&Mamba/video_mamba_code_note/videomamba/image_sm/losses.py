@@ -1,5 +1,6 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
+# renyu: 注意这是DeiT原版的知识蒸馏损失函数，VideoMamba其实用的默认交叉熵
 """
 Implements the knowledge distillation loss
 """

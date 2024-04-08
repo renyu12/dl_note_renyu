@@ -132,7 +132,12 @@ class Mamba(nn.Module):
             conv_state, ssm_state = self._get_states_from_cache(inference_params, batch)
             if inference_params.seqlen_offset > 0:
                 # The states are updated inplace
-                # renyu: TODO: 这里有个路径没太看懂，是不是有什么存储过的结果就可以调用step方法更新state，然后直接返回结果不需要后面的计算了？
+                # renyu: TODO: 这里有个路径没太看懂
+                #              似乎是有读取到缓存的inference_params结果就可以调用step方法更新state，然后直接返回结果不需要后面的计算了？
+                #              有知乎上讨论也不太明白，说实际上没有走这个路径
+                #              我看step里用的代码也是S6的运算，推测是卷积+SSM的递归方式计算很慢
+                #              实际用的还是selective_scan的硬件加速方法， 使用可并行的扫描操作替代原始的串行递归
+                #              但根据inference_params参数推测可能是在推理的时候会用到串行递归方式
                 out, _, _ = self.step(hidden_states, conv_state, ssm_state)
                 return out
 

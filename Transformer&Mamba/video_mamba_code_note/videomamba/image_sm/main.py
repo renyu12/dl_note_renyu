@@ -302,7 +302,7 @@ def main(args):
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
         drop_block_rate=None,
-        img_size=args.input_size,
+        img_size=args.input_size,    # renyu: 输入参数--input-size设定图像大小，默认224就是长宽一样的224*224
     )
                 
     # renyu: 如果是做预训练模型微调，则加载指定的预训练模型，根据模型配置设定好参数      
@@ -322,6 +322,7 @@ def main(args):
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
 
+        # renyu: 看起来是在这里做的位置编码embedding的插值，就是加载的预训练模型如果和微调的目标模型输入分辨率不一致就要插值调整
         # interpolate position embedding
         pos_embed_checkpoint = checkpoint_model['pos_embed']
         embedding_size = pos_embed_checkpoint.shape[-1]
@@ -388,7 +389,7 @@ def main(args):
     # renyu: 设置学习率scheduler和训练轮数
     lr_scheduler, args.epochs = create_scheduler(args, optimizer)
 
-    # renyu: 根据参数设置损失函数，默认是标签平滑交叉熵
+    # renyu: 根据参数设置损失函数，这里有点瞎写顺序，初始化个标签平滑交叉熵，其实下面默认是普通的交叉熵
     criterion = LabelSmoothingCrossEntropy()
 
     if mixup_active:

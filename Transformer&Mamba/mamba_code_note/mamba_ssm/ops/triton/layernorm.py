@@ -5,6 +5,7 @@
 # For the backward pass, we keep weight_grad and bias_grad in registers and accumulate.
 # This is faster for dimensions up to 8k, but after that it's much slower due to register spilling.
 # The models we train have hidden dim up to 8k anyway (e.g. Llama 70B), so this is fine.
+# renyu: 基于Triton写的归一化层的代码，提供了layer_norm和rms_norm两种方法
 
 import math
 

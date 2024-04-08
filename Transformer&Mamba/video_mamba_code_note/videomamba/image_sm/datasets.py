@@ -1,5 +1,6 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
+# renyu: 加载各种图像数据集的代码，基本是用的DeiT的原版，但是其中ImageNet的加载稍有点区别，是自己写的方法
 import os
 import json
 
@@ -9,7 +10,7 @@ from torchvision.datasets.folder import ImageFolder, default_loader
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import create_transform
 
-from imagenet_dataset import ImageNetDataset
+from imagenet_dataset import ImageNetDataset    # renyu: 自己另外写的ImageNet加载库
 
 # renyu: 加载INat动物图像分类数据集的类
 class INatDataset(ImageFolder):
@@ -61,6 +62,7 @@ def build_dataset(is_train, args):
     if args.data_set == 'CIFAR':
         dataset = datasets.CIFAR100(args.data_path, train=is_train, transform=transform)
         nb_classes = 100
+    # renyu: ImageNet的加载是自己写的，区分训练集和测试集
     elif args.data_set == 'IMNET':
         # root = os.path.join(args.data_path, 'train' if is_train else 'val')
         # dataset = datasets.ImageFolder(root, transform=transform)

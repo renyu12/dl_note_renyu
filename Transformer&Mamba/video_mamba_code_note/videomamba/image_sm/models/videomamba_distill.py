@@ -174,7 +174,7 @@ class VisionMamba(nn.Module):
             rms_norm=True, 
             residual_in_fp32=True,
             bimamba=True,
-            teacher_embed_dim=384,
+            teacher_embed_dim=384,         # renyu: 多了两个初始化参数，teacher的embedding维数和类型（student/teacher）
             model_type="student",
             device=None,
             dtype=None,
@@ -225,6 +225,7 @@ class VisionMamba(nn.Module):
         # output head
         self.norm_f = (nn.LayerNorm if not rms_norm else RMSNorm)(embed_dim, eps=norm_epsilon, **factory_kwargs)
 
+        # renyu: student和teacher模型主要的区别应该是这里student模型有个蒸馏的output head（TODO: 什么效果？）
         # distillation head
         if self.model_type == "student":
             self.distill_head = nn.Sequential(
