@@ -12,6 +12,7 @@ GPUS=16
 GPUS_PER_NODE=8
 CPUS_PER_TASK=16
 
+# renyu: middle 64帧 384*384升分辨率模型是middle 64帧 224*224模型微调来的
 srun -p $PARTITION \
         --job-name=${JOB_NAME} \
         --gres=gpu:${GPUS_PER_NODE} \

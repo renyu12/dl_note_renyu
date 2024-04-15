@@ -16,13 +16,14 @@ NUM_GPUS=8
 NUM_CPU=128
 
 # renyu: 训练最核心的small 224*224模型，用的8卡服务器srun提交的
-srun --mpi=pmi2 \
-    -p ${PARTITION} \
-    -n${NNODE} \
-    --gres=gpu:${NUM_GPUS} \
-    --ntasks-per-node=1 \
-    --cpus-per-task=${NUM_CPU} \
-    python -m torch.distributed.launch --nproc_per_node=${NUM_GPUS} --use_env main.py \
+# renyu: srun命令是slurm作业调度器的作业提交命令
+srun --mpi=pmi2 \                   # renyu: slurm的Message Passing Interface用pmi2库
+    -p ${PARTITION} \               # renyu: 任务在哪个分区上跑（slurm中将节点划分为多个分区）
+    -n${NNODE} \                    # renyu: 节点数（服务器数量）
+    --gres=gpu:${NUM_GPUS} \        # renyu: 每个节点GPU数
+    --ntasks-per-node=1 \           # renyu: 每个节点任务数（TODO: 是因为只有1个任务吗？不然应该分8个=GPU数量吧？）
+    --cpus-per-task=${NUM_CPU} \    # renyu: 每个任务的CPU数（TODO: 全分完了，是因为只有一个任务吗？）
+    python -m torch.distributed.launch --nproc_per_node=${NUM_GPUS} --use_env main.py \    # renyu: 把launch库当做脚本执行，应该是方便分布式训练的
         --root_dir_train your_imagenet_path/train/ \
         --meta_file_train your_imagenet_path/meta/train.txt \
         --root_dir_val your_imagenet_path/val/ \

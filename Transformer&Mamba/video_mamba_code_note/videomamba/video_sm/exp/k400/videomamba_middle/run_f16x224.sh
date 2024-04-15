@@ -12,6 +12,7 @@ GPUS=16
 GPUS_PER_NODE=8
 CPUS_PER_TASK=16
 
+# renyu: middle 16帧 224*224模型，2*8gpu训练
 srun -p $PARTITION \
         --job-name=${JOB_NAME} \
         --gres=gpu:${GPUS_PER_NODE} \
@@ -19,7 +20,7 @@ srun -p $PARTITION \
         --ntasks-per-node=${GPUS_PER_NODE} \
         --cpus-per-task=${CPUS_PER_TASK} \
         --kill-on-bad-exit=1 \
-        python run_class_finetuning.py \
+        python run_class_finetuning.py \    # renyu: 各个从头训练的脚本都是通过run_class_finetuning.py脚本启动的
         --model videomamba_middle \
         --data_path ${DATA_PATH} \
         --prefix ${PREFIX} \

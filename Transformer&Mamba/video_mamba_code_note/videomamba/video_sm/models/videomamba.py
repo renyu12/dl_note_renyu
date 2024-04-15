@@ -196,7 +196,7 @@ class PatchEmbed(nn.Module):
         x = self.proj(x)
         return x
     
-
+# renyu: 哈哈哈，model的类名还是写的VisionMamba没有改，应该是差不多拿来用的
 class VisionMamba(nn.Module):
     def __init__(
             self, 
@@ -298,6 +298,7 @@ class VisionMamba(nn.Module):
             for i, layer in enumerate(self.layers)
         }
 
+    # renyu: 不需要权重衰减正则化的部分
     @torch.jit.ignore
     def no_weight_decay(self):
         return {"pos_embed", "cls_token", "temporal_pos_embedding"}
@@ -310,10 +311,12 @@ class VisionMamba(nn.Module):
         _load_weights(self, checkpoint_path, prefix)
 
     def forward_features(self, x, inference_params=None):
+        # renyu: 先是调用PatchEmbed做下简单的embedding处理，调整通道顺序
         x = self.patch_embed(x)
         B, C, T, H, W = x.shape
         x = x.permute(0, 2, 3, 4, 1).reshape(B * T, H * W, C)
 
+        # renyu: TODO: cls_token是怎么做的？
         cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_token, x), dim=1)
         x = x + self.pos_embed    # renyu: 空域位置编码

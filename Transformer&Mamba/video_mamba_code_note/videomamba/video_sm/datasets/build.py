@@ -70,6 +70,7 @@ class DataAugmentationForVideoMAE(object):
         return repr
 
 
+# renyu: 创建数据集API（预训练使用，做了MAE，代码中run_mae/umt/videomamba_pretraining.py都用的这个)
 def build_pretraining_dataset(args):
     transform = DataAugmentationForVideoMAE(args)
     dataset = VideoMAE(
@@ -92,9 +93,10 @@ def build_pretraining_dataset(args):
     print("Data Aug = %s" % str(transform))
     return dataset
 
-
+# renyu: 创建数据集API（非预训练使用，支持很多数据集，run_class/regression_finetuning.py都用的这个)
 def build_dataset(is_train, test_mode, args):
     print(f'Use Dataset: {args.data_set}')
+    # renyu: Kinetics数据集处理
     if args.data_set in [
             'Kinetics',
             'Kinetics_sparse',
@@ -102,6 +104,7 @@ def build_dataset(is_train, test_mode, args):
         ]:
         mode = None
         anno_path = None
+        # renyu: 加载训练、测试、验证集的时候读取不同的csv标签文件
         if is_train is True:
             mode = 'train'
             anno_path = os.path.join(args.data_path, 'train.csv')
@@ -112,6 +115,7 @@ def build_dataset(is_train, test_mode, args):
             mode = 'validation'
             anno_path = os.path.join(args.data_path, 'val.csv') 
 
+        # renyu: 用sparse采样的数据集调用对应的sparse方法
         if 'sparse' in args.data_set:
             func = VideoClsDataset_sparse
         else:

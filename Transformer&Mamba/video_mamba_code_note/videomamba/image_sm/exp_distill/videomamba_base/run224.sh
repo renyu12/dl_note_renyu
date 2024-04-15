@@ -11,6 +11,8 @@ JOB_NAME='videomamba_middle_res224'
 OUTPUT_DIR="$(dirname $0)"
 
 # renyu: 模型蒸馏模式，从已经训练好的小模型蒸馏得到大模型，这里是small指导base
+#        说因为base模型感觉效果已经不是很好了，倾向于过拟合，没有进一步再去往高分辨率做
+#        使用run_with_submitit_distill.py蒸馏脚本提交，似乎是按默认的2*8卡配置
 python run_with_submitit_distill.py \
     --root_dir_train your_imagenet_path/train/ \
     --meta_file_train your_imagenet_path/meta/train.txt \

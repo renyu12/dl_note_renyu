@@ -361,7 +361,7 @@ def main(args):
             device='cpu' if args.model_ema_force_cpu else '',
             resume='')
 
-    # renyu: 如果是分布式训练做下处理
+    # renyu: 如果是分布式训练做下处理，存一下不带分布式的模型到model_without_ddp，因为保存和推理需要非DDP的
     model_without_ddp = model
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])

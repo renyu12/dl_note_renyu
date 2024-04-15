@@ -1,3 +1,6 @@
+# renyu: 看名字应该是在原始Kinetics-400数据集基础上做了sparse时域采样得到的
+#        从各个训练启动脚本看实际都是用的这个数据集没有直接用Kinetics-400的
+#        TODO: 这里的代码对比Kinetics-400的代码并未发现很明显的区别，那sparse时域采样是如何实现的？
 import os
 import os
 import io
@@ -24,6 +27,7 @@ try:
 except ImportError:
     has_client = False
 
+# renyu: 实现sparse时域采样的Kinetics-400数据集加载类，在对外build_dataset API中调用
 class VideoClsDataset_sparse(Dataset):
     """Load your own video classification dataset."""
 

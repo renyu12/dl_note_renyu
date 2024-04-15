@@ -15,6 +15,7 @@ NNODE=1
 NUM_GPUS=8
 NUM_CPU=128
 
+# renyu: 训练tiny 448*448升分辨率模型，基于tiny 224*224进行fine tune，用的8卡服务器srun提交的
 srun --mpi=pmi2 \
     -p ${PARTITION} \
     -n${NNODE} \
