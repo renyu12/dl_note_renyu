@@ -25,7 +25,7 @@ try:
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 
-
+# renyu: 基于ImageNet的预训练模型，是对应单模态视频任务的模型基础，要提前下载好放到目录下
 MODEL_PATH = 'your_model_path'
 _MODELS = {
     "videomamba_t16_in1k": os.path.join(MODEL_PATH, "videomamba_t16_in1k_res224.pth"),
@@ -386,6 +386,7 @@ def inflate_weight(weight_2d, time_dim, center=True):
     return weight_3d
 
 
+# renyu: 将预训练模型的参数加载到目标模型中
 def load_state_dict(model, state_dict, center=True):
     state_dict_3d = model.state_dict()
     for k in state_dict.keys():

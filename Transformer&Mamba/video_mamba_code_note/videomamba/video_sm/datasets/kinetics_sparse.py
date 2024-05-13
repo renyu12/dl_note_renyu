@@ -63,6 +63,7 @@ class VideoClsDataset_sparse(Dataset):
             raise ImportError("Unable to import `decord` which is required to read videos.")
 
         import pandas as pd
+        # renyu: anno_path是.csv文件目录，按说有train.csv val.csv test.csv三个文件
         cleaned = pd.read_csv(self.anno_path, header=None, delimiter=self.split)
         self.dataset_samples = list(cleaned.values[:, 0])
         self.label_array = list(cleaned.values[:, 1])
@@ -264,7 +265,7 @@ class VideoClsDataset_sparse(Dataset):
     def loadvideo_decord(self, sample, chunk_nb=0):
         """Load video content using Decord"""
         fname = sample
-        fname = os.path.join(self.prefix, fname)
+        fname = os.path.join(self.prefix, fname)    # renyu: prefix是视频文件目录
 
         try:
             if self.keep_aspect_ratio:
