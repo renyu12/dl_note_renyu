@@ -12,6 +12,7 @@ import utils
 from scipy.special import softmax
 
 
+# renyu: 跑正向传播&算loss，model()调用的模型forward()方法
 def train_class_batch(model, samples, target, criterion):
     outputs = model(samples)
     loss = criterion(outputs, target)
@@ -25,7 +26,7 @@ def get_loss_scale_for_deepspeed(model):
     except Exception:
         return 0
 
-
+# renyu: 跑一轮训练，核心代码，run_class_finetuning.py main函数中训练循环调用
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, amp_autocast, max_norm: float = 0,
@@ -39,6 +40,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 1
 
+    # renyu: 梯度清零，没loss_scaler（用了deepspeed优化器）调用模型的梯度清零方法，否则直接调用优化器的清零方法
     if loss_scaler is None:
         model.zero_grad()
         model.micro_steps = 0
@@ -64,9 +66,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
+        # renyu: 开了mixup数据增强在这里做
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
 
+        # renyu: 正向传播&loss计算
+        #        没loss_scaler（用了deepspeed优化器）但开了自动混合精度用BF16/FP16，
+        #        否则用自动混合精度（TODO: 没用deepspeed又关了自动混合精度怎么办？）
         if loss_scaler is None:
             if not no_amp:
                 samples = samples.bfloat16() if bf16 else samples.half()
@@ -90,6 +96,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             print("Loss is {}, stopping training".format(loss_value))
             sys.exit(1)
 
+        # renyu: 反向传播更新梯度，但是也区分用了loss_scaler和deepspeed的情况处理
         if loss_scaler is None:
             loss /= update_freq
             model.backward(loss)
@@ -129,6 +136,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         torch.cuda.synchronize()
 
+        # renyu: 记录准确率、学习率、正则化权重等信息，记录日志
         if mixup_fn is None:
             class_acc = (output.max(-1)[-1] == targets).float().mean()
         else:
@@ -168,6 +176,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+#renyu: 开了验证的话，每一轮训练完都会在验证集上测试当前验证集准确率
 @torch.no_grad()
 def validation_one_epoch(data_loader, model, device, amp_autocast, ds=True, no_amp=False, bf16=False, maxk=5):
     criterion = torch.nn.CrossEntropyLoss()
@@ -209,6 +218,7 @@ def validation_one_epoch(data_loader, model, device, amp_autocast, ds=True, no_a
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+# renyu: 使用eval评估模式或者训练全部结束了会跑这个final_test在测试集上看准确率
 @torch.no_grad()
 def final_test(data_loader, model, device, file, amp_autocast, ds=True, no_amp=False, bf16=False, maxk=5):
     criterion = torch.nn.CrossEntropyLoss()
@@ -269,6 +279,7 @@ def final_test(data_loader, model, device, file, amp_autocast, ds=True, no_amp=F
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+# renyu: 分布式训练合并统计结果
 def merge(eval_path, num_tasks):
     dict_feats = {}
     dict_label = {}

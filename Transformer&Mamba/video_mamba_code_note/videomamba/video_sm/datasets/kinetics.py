@@ -239,7 +239,7 @@ class VideoClsDataset(Dataset):
     def loadvideo_decord(self, sample, sample_rate_scale=1, chunk_nb=0):
         """Load video content using Decord"""
         fname = sample
-        fname = os.path.join(self.prefix, fname)
+        fname = os.path.join(self.prefix, fname)    # renyu: prefix是视频文件地址
 
         try:
             if self.keep_aspect_ratio:

@@ -10,6 +10,7 @@ CutMix: https://github.com/clovaai/CutMix-PyTorch
 
 Hacked together by / Copyright 2019, Ross Wightman
 """
+# renyu: 经典的图像数据增强方法，Mixup是按比例在像素值上混合随机两个样本，CutMix是随机找样本中一个区域拼接为另一个样本
 import numpy as np
 import torch
 

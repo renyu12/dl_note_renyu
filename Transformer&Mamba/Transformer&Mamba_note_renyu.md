@@ -50,6 +50,11 @@ BERT是基于Transformer预训练+微调的模型，也就是不关新具体任�
 谷歌官方是T2T团队开源的代码 https://github.com/tensorflow/tensor2tensor  
 有博主说代码比较难读，后面其他人的实现也不少，建议看哈佛NLP团队写的pytorch注释版本https://github.com/harvardnlp/annotated-transformer  
   
+### 《An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale》  
+2020年将Transformer用在CV任务的ViT，Google团队做的。不算最早，但是实现了最简单的方式取得很好的效果。成为了奠基论文。  
+最重要的一点就是输入的patch embedding。将224x224的输入图像，分为16x16的小patch，一张图片对应的序列长度就是(224x224)/(16x16)=196，一个patch Embedding之前的维度是16x16x3通道=768维。  
+然后一个patch经过线性投影层就得到一个token/Embedding，这里我一开始不理解啥是线性投影层，其实看下代码实现就是不加ReLU激活函数的2D卷积，然后卷积核大小同Patch 16x16x3，步长也同Patch 16x16，这样就实现了一个Patch-卷积核对应位置点乘累加得到一个值，那想要任意长度的Embedding，只需要调整卷积核数量即可。原始的ViT中就是用了768个卷积核保持维数不变。  
+既然用了卷积（线性投影）层，这里就有可以学习的weight和bias。所以和NLP任务中使用固定的预训练模型/word2vec等工具做Embedding不同，这也是由于CV任务中图像输入比文本输入更复杂，没法用固定的Embedding方式就得到准确的Representation，所以ViT中的Embedding层也是一起训练调参的。  
   
 # Mamba  
 ## 简介  
@@ -174,7 +179,7 @@ README.md说直接pip install mamba-ssm即可，我不是很成功，卡在build
     conda activate mamba1  
     conda install pytorch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 pytorch-cuda=11.8 -c pytorch -c nvidia  
     pip install packaging  
-这样基本环境就有了，然后在源码目录下  
+pytorch安装那一步还是会比较慢看网速，会装很多包，PyTorch 1G+，估计十多分钟的样子。这样基本环境就有了，然后在源码目录下  
   
     python setup.py install  
 就可以安装，但这里有个小坑是装依赖项的时候还是拉的官方源，国内机器非常慢会断连接中断安装……一开始一个一个手动pip，后面发现可以搞个setup.cfg配置文件写上  
@@ -292,7 +297,23 @@ TODO!!!!!
 源码部署测试中，还未能确认成功……  
 一些问题记录下：  
 * 基本环境  
-Torch 2.1.2 CUDA11.8 要装好Mamba  
+Torch 2.1.2 CUDA11.8 要手动先装好causal-conv1d和mamba，看有博客上是自己找的causal-conv1d和mamba的版本安装的，就会存在没有修改成双向mamba “bimamba”的问题，需要自己找到python3.10/site-packages/mamba-ssm/目录装好的代码去手动用VideoMamba里的修改后双向mamba去替换，反正有点麻烦~直接git clone VideoMamba源码，然后安装。  
+```  
+（这里省略了Mamba基本环境的安装，参考上文的内容，略过）  
+git clone https://github.com/OpenGVLab/VideoMamba.git  
+cd VideoMamba/causal-conv1d/  
+python setup.py install  
+cd ../mamba  
+（需要改国内源别忘了创建setup.cfg）  
+python setup.py install  
+```  
+* 其他依赖包  
+```  
+cd VideoMamba  
+pip install -r requirements.txt  
+```  
+但是其中有两个包是有问题的，需要手动安装，修改下requirements.txt文件注释掉apex==0.1和skimage=0.0  
+用到的包不少，还有TensorFlow包600M，一起也有1G+，看网速了。  
 * apex==0.1包安装  
 这个包是PyTorch用NIVDIA显卡做混合精度&多卡并行的扩展库  
 这个包直接pip安装似乎是不行，没有对应版本……可以到github下载源码然后安装似乎就是0.1版本  
@@ -305,7 +326,75 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 # pip < 23.1  
 pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --global-option="--cpp_ext" --global-option="--cuda_ext" ./  
 ```  
+这里因为也是要编译C++，比较花时间。  
 * skimage=0.0包安装  
 应该是requirements.txt文件里写错了，这个包是scikit-image  
+  
+##### 单卡跑训练  
+这里以video_sm单模态中kinetic-400任务为例，其他应该差不多  
+  
+* 启动脚本移除分布式训练部分  
+如果按源码中准备的shell脚本去跑，需要是有slurm服务器，并且单机8卡以及2台8卡的环境……  
+只有单卡测试验证的话需要调整脚本，以最小的 run_f8x224.sh脚本为例，删除其中srun启动部分，然后调整其中数据集路径（看了代码data_path是标签文件地址，prefix是视频文件地址），设置日志地址和输出模型地址log_dir和output_dir，batch_size和epoch根据情况设置，num_workers也可能调整。另外验证的话可能跑不出best checkpoint，test_best也可以删掉。  
+```  
+python run_class_finetuning.py \  
+        --model videomamba_tiny \  
+        --data_path '/root/autodl-fs/renyu_kinetics-2' \  
+        --prefix '/root/autodl-fs/renyu_kinetics-2' \  
+        --data_set 'Kinetics_sparse' \  
+        --split ',' \  
+        --nb_classes 400 \  
+        --log_dir "/root/autodl-tmp/videomamba_run/log" \  
+        --output_dir "/root/autodl-tmp/videomamba_run/output" \  
+        --batch_size 1 \  
+        --num_sample 2 \  
+        --input_size 224 \  
+        --short_side_size 224 \  
+        --save_ckpt_freq 100 \  
+        --num_frames 8 \  
+        --num_workers 1 \  
+        --warmup_epochs 5 \  
+        --tubelet_size 1 \  
+        --epochs 7 \  
+        --lr 2e-4 \  
+        --drop_path 0.1 \  
+        --aa rand-m5-n2-mstd0.25-inc1 \  
+        --opt adamw \  
+        --opt_betas 0.9 0.999 \  
+        --weight_decay 0.1 \  
+        --test_num_segment 4 \  
+        --test_num_crop 3 \  
+        --dist_eval \  
+        --test_best \  
+        --bf16  
+  
+```  
+  
+*  准备数据集  
+还要准备数据集sthsthv2或者kinetics-400，都不好整。可以随便看下作者团队提供的Kinetics-400的格式，就是一个目录下有26w+的视频，然后放上train.csv val.csv test.csv三个文件，文件格式很简单，第一列文件名，第二列是分类序号，所以可以自己按照格式做小的示例数据放上去。注意--data_path '/root/autodl-fs/renyu_kinetics-2' 参数是.csv文件目录，--prefix '/root/autodl-fs/renyu_kinetics-2' 参数是视频文件目录。  
+* 准备预训练模型  
+还要下载ImageNet的预训练模型，因为video-sm的模型都是基于ImageNet预训练模型去微调的。参考https://github.com/OpenGVLab/VideoMamba/blob/main/videomamba/image_sm/MODEL_ZOO.md。按说要下载tiny、small、middle三个，不过只是要能跑的话理论上搞一个也行。然后记得修改videomamba/video_sm/models/videomamba.py里面的MODEL_PATH变量为你放预训练模型的目录。  
+* 处理预加载模型state_dict层级问题  
+load_state_dict出错，做个state_dict = state_dict['model']似乎可以跑了……]  
+* 移除train_one_epoch中检查分布式损失函数计算的代码  
+这一段代码必须是分布式执行的，单卡都没初始化相关变量，但是单卡也不需要检查损失函数是否NaN或者Infinite，直接全部注释掉  
+```  
+        loss_list = [torch.zeros_like(loss) for _ in range(dist.get_world_size())]  
+        dist.all_gather(loss_list, loss)  
+        loss_list = torch.tensor(loss_list)  
+        loss_list_isnan = torch.isnan(loss_list).any()  
+        loss_list_isinf = torch.isinf(loss_list).any()  
+  
+        if loss_list_isnan or loss_list_isinf:  
+            print(" ========== loss_isnan = {},  loss_isinf = {} ========== ".format(loss_list_isnan, loss_list_isinf))  
+            print("Loss is {}, stopping training".format(loss_value))  
+            sys.exit(1)  
+```  
+* 移除评估过程中分布式同步方法  
+在main函数训练主循环跑完测试最佳模型（开了test_best参数）或者直接eval模式跑的。会调用分布式进程阻塞方法等待所有进程结束同步  
+```  
+    torch.distributed.barrier()  
+```  
+这一句也直接注释掉。  
   
 由于提供的原代码是在多显卡的服务器上通过srun提交训练任务，并且搭配了ImageNet-1k、Kinetics-400这些比较大的数据集，没能直接跑起来，后续还是需要读代码看下如何单GPU运行并且跑样本做推理测试，以及如何做的预训练和微调。

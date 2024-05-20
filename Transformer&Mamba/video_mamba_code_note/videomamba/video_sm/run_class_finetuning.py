@@ -253,7 +253,7 @@ def main(args, ds_init):
     # renyu: 开启cndnn自动算法优化
     cudnn.benchmark = True
 
-    # renyu: 根据输入参数选择数据集创建实例，如果开了微调时禁用评估的参数，那就不加载验证集了
+    # renyu: 根据输入参数选择数据集创建实例，分别加载训练、验证、测试集，如果开了微调时禁用评估的参数，那就不加载验证集了
     dataset_train, args.nb_classes = build_dataset(is_train=True, test_mode=False, args=args)
     if args.disable_eval_during_finetuning:
         dataset_val = None
@@ -286,6 +286,7 @@ def main(args, ds_init):
     else:
         log_writer = None
 
+    # renyu: num_sample指定重复数据增强的个数，默认为2，也就是所有输入视频都重复输入两遍，所以搞个特别的函数辅助采样
     if args.num_sample > 1:
         collate_func = partial(multiple_samples_collate, fold=False)
     else:
@@ -328,7 +329,8 @@ def main(args, ds_init):
     else:
         data_loader_test = None
 
-    # renyu: 如果开启了mixup数据增强就创建Mixup类实例准备操作
+    # renyu: 如果开启了mixup数据增强就创建Mixup类实例准备操作（datasets.mixup中引入，经典数据增强方法）
+    #        图像分类有用，视频任务中看并没有用到
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
     if mixup_active:
@@ -354,7 +356,7 @@ def main(args, ds_init):
         model = create_model(
             args.model,
             img_size=args.input_size,
-            pretrained=False if args.finetune else True,
+            pretrained=False if args.finetune else True,    # renyu: 微调模式不加载预训练模型，一般都加载
             num_classes=args.nb_classes,
             fc_drop_rate=args.fc_drop_rate,
             drop_path_rate=args.drop_path,
@@ -569,7 +571,7 @@ def main(args, ds_init):
     skip_weight_decay_list = model.no_weight_decay()
     print("Skip weight decay list: ", skip_weight_decay_list)
 
-    # renyu: 初始化优化器，开了deepspeed单独做处理用deepspeed的优化器
+    # renyu: 初始化优化器，开了deepspeed（23年微软并行训练框架）单独做处理用deepspeed的优化器
     amp_autocast = contextlib.nullcontext()
     loss_scaler = "none"
     if args.enable_deepspeed:
@@ -594,13 +596,14 @@ def main(args, ds_init):
             get_num_layer=assigner.get_layer_id if assigner is not None else None, 
             get_layer_scale=assigner.get_scale if assigner is not None else None)
 
+        # renyu: 开了自动混合精度就可以用BF16，没有BF16就FP16，自动混合精度要额外搭配loss_scaler来缩放
         if not args.no_amp:
             print(f"Use bf16: {args.bf16}")
             dtype = torch.bfloat16 if args.bf16 else torch.float16
             amp_autocast = torch.cuda.amp.autocast(dtype=dtype)
             loss_scaler = NativeScaler()
 
-    # renyu: 初始话学习率的scheduler和权重缩减的scheduler
+    # renyu: 初始化学习率的scheduler和权重缩减的scheduler
     print("Use step level LR scheduler!")
     lr_schedule_values = utils.cosine_scheduler(
         args.lr, args.min_lr, args.epochs, num_training_steps_per_epoch,

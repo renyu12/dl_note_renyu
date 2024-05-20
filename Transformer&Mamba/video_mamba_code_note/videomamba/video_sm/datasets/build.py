@@ -115,12 +115,13 @@ def build_dataset(is_train, test_mode, args):
             mode = 'validation'
             anno_path = os.path.join(args.data_path, 'val.csv') 
 
-        # renyu: 用sparse采样的数据集调用对应的sparse方法
+        # renyu: 用sparse采样的数据集调用对应的sparse方法，加载数据集方法定义在kinetics.py中
         if 'sparse' in args.data_set:
             func = VideoClsDataset_sparse
         else:
             func = VideoClsDataset
 
+        # renyu: func是根据sparse或者没sparse选的加载kinetics数据集方法
         dataset = func(
             anno_path=anno_path,
             prefix=args.prefix,

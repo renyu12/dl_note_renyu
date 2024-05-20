@@ -186,6 +186,8 @@ class PatchEmbed(nn.Module):
         self.num_patches = num_patches
         self.tubelet_size = kernel_size
 
+        # renyu: 其实就是做了一个Conv3d卷积，以16*16*3的patch为卷积核，无填充步长不重复直接遍历整个224*224图像（相当于分块）
+        #        输出维数根据model的参数配置，例如tiny是192维，就是192个卷积核，使得一个小块192次卷积后得到192长度的token
         self.proj = nn.Conv3d(
             in_chans, embed_dim, 
             kernel_size=(kernel_size, patch_size[0], patch_size[1]),
@@ -245,11 +247,15 @@ class VisionMamba(nn.Module):
         )
         num_patches = self.patch_embed.num_patches
 
+        # renyu: cls_token初始化为(1,1,token维数)的全0张量，其中token维数和设置的model一致，例如tiny是192
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
+        # renyu: 位置编码长度为序列长度+1，因为还有个cls_token
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim))
+        # renyu: 时域位置编码长度为帧数（除以tublet_size，这里是可以多帧为一组，似乎默认为1了）
         self.temporal_pos_embedding = nn.Parameter(torch.zeros(1, num_frames // kernel_size, embed_dim))
         self.pos_drop = nn.Dropout(p=drop_rate)
 
+        # renyu: 这是Mamba网络出来之后走一个带Dropout的全连接层做分类，例如k400任务就是196维的特征变为400分类
         self.head_drop = nn.Dropout(fc_drop_rate) if fc_drop_rate > 0 else nn.Identity()
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
 
@@ -298,7 +304,7 @@ class VisionMamba(nn.Module):
             for i, layer in enumerate(self.layers)
         }
 
-    # renyu: 不需要权重衰减正则化的部分
+    # renyu: 不需要权重衰减正则化的部分，硬编码写到一个元组，处理时跳过
     @torch.jit.ignore
     def no_weight_decay(self):
         return {"pos_embed", "cls_token", "temporal_pos_embedding"}
@@ -311,22 +317,45 @@ class VisionMamba(nn.Module):
         _load_weights(self, checkpoint_path, prefix)
 
     def forward_features(self, x, inference_params=None):
-        # renyu: 先是调用PatchEmbed做下简单的embedding处理，调整通道顺序
+        # renyu: 先是调用PatchEmbed（即Conv3d）做下简单的embedding处理，然后调整下通道顺序
+        #        输入的视频数据是5维张量 B-Batch Size C-Channel T-Time（帧数） H-Height W-Width
+        #        例如torch.Size([128, 3, 8, 224, 224]) 对应一批64个视频（重复*2）、RGB三通道、一次8帧，高和宽都是224像素
         x = self.patch_embed(x)
+        # renyu: 经过了PatchEmbed之后变为torch.Size([128, 192, 8, 14, 14])
+        #        对应一批64个视频（重复*2），一个Patch变成192维的token，一次8帧，224*224的图像可分为14*14个16*16的小块
         B, C, T, H, W = x.shape
+        # renyu: 调整下输入的格式，5维变为3维，torch.Size([1024, 196, 192])：
+        #        第一维是一批处理的图像数 = 批*帧数 = 64*2*8 = 1024
+        #        第二维是一张图像中的Patch分块数 = 高*宽 = 14*14 = 196
+        #        第三维是token的维数，模型指定，tiny模型固定192
+        #        所以这里其实和图像的处理是一样的，连续的多帧只不过是当做连续的token输入
         x = x.permute(0, 2, 3, 4, 1).reshape(B * T, H * W, C)
 
-        # renyu: TODO: cls_token是怎么做的？
+        # renyu: cls_token是ViT中就搞了的经典做法了，因为做分类任务不会对整个output sequence做处理，一般搞一个token的输出就可以了
+        #        那搞哪个token呢？搞哪个都是不合适的，因为会有偏向认为当前token重要一些。所以干脆额外搞一个无意义的token输入去算自注意力
+        #        这样这个token对应的output是和其他全部token无偏差的的关系，更适合作为特征
+        #        用的时候也很简单，假设输入序列是n个token，直接在最前面（一般认为是0位置）加上这个cls_token就行，输入序列长度为n+1
+        # renyu: expand cls_token张量是扩展其维度，后面两维-1,-1的意思是保持不变，而第一维和B*T一致
+        #        例如原始为(1,1,192)->(64*2*8,1,192)，这里应该是已经被初始化为随机数了
         cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        # renyu: cls_token拼接到x前面，x就增加了一项196->197，torch.Size([1024, 197, 192])，注意这还只是个临时的cls_token
         x = torch.cat((cls_token, x), dim=1)
-        x = x + self.pos_embed    # renyu: 空域位置编码
+        # renyu: 空域位置编码，大小是torch.Size([1, 197, 192])，也都是初始化为随机数了，保证每张图像中每个Patch的位置编码不一样即可
+        x = x + self.pos_embed
 
         # temporal pos
+        # renyu: 这里的cls_token处理有点麻烦，没太理清，大致记一下
+        #        做的前面是单张图片中每一个搞了个cls_token，加上空域位置编码，但实际上这个还不够用
+        #        我们希望要的是一个视频一个cls_token才对，还要考虑时域（例如一个视频采样了8帧），取出每个视频的cls_token
+        #        torch.Size([128, 1, 192])，x删去所有单张图片cls_token，变成torch.Size([1024, 197, 192])->torch.Size([1024, 196, 192])
         cls_tokens = x[:B, :1, :]
         x = x[:, 1:]
+        # renyu: 调整输入格式，按torch.Size([25088, 8, 192])，方便加时域位置编码
         x = rearrange(x, '(b t) n m -> (b n) t m', b=B, t=T)
-        x = x + self.temporal_pos_embedding    # renyu: 时域位置编码
+        x = x + self.temporal_pos_embedding    # renyu: 加上随机初始化的时域位置编码，即每一个视频第1-8帧不一样
+        # renyu: 这里又调整下输入格式，变为torch.Size([128, 1568, 192])的格式，即64个视频（重复*2），196*8个Patch，一个token 192维
         x = rearrange(x, '(b n) t m -> b (t n) m', b=B, t=T)
+        # renyu: 最终加上每个视频不一样的cls_token，得到torch.Size([128, 1569, 192])
         x = torch.cat((cls_tokens, x), dim=1)
 
         x = self.pos_drop(x)
@@ -345,12 +374,14 @@ class VisionMamba(nn.Module):
                     hidden_states, residual, inference_params=inference_params
                 )
 
+        # renyu: 没开fused_add_norm加速配置就直接分开做加残差和归一化
         if not self.fused_add_norm:
             if residual is None:
                 residual = hidden_states
             else:
                 residual = residual + self.drop_path(hidden_states)
             hidden_states = self.norm_f(residual.to(dtype=self.norm_f.weight.dtype))
+        # renyu: 开了fused_add_norm加速配置直接调用方法一步处理，默认应该都是开的
         else:
             # Set prenorm=False here since we don't need the residual
             fused_add_norm_fn = rms_norm_fn if isinstance(self.norm_f, RMSNorm) else layer_norm_fn
@@ -365,11 +396,14 @@ class VisionMamba(nn.Module):
             )
 
         # return only cls token
+        # renyu: 应该是只取cls_token对应的输出
         return hidden_states[:, 0, :]
 
+    # renyu: engine里面一轮训练中调用的，model(samples)直接调用的这里正向传播
     def forward(self, x, inference_params=None):
+        # renyu: 通过Mamba提取出的特征是torch.Size([128, 192])，一批64个视频（重复*2），一个的输出特征是192维
         x = self.forward_features(x, inference_params)
-        x = self.head(self.head_drop(x))
+        x = self.head(self.head_drop(x))    # renyu: 过一个全连接层，还做了dropout，得到torch.Size([128, 400])的k400分类结果
         return x
 
 
@@ -416,6 +450,7 @@ def videomamba_tiny(pretrained=False, **kwargs):
         **kwargs
     )
     model.default_cfg = _cfg()
+    # renyu: 开启预训练模式则根据硬编码的地址加载预训练模型（默认都开启，除非是finetune升高分辨率的模式）
     if pretrained:
         print('load pretrained weights')
         state_dict = torch.load(_MODELS["videomamba_t16_in1k"], map_location='cpu')
