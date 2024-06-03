@@ -127,16 +127,16 @@ def build_dataset(is_train, test_mode, args):
             prefix=args.prefix,
             split=args.split,
             mode=mode,
-            clip_len=args.num_frames,
+            clip_len=args.num_frames,    # renyu: 一个视频采样几帧输入
             frame_sample_rate=args.sampling_rate,
             num_segment=1,
             test_num_segment=args.test_num_segment,
             test_num_crop=args.test_num_crop,
             num_crop=1 if not test_mode else 3,
             keep_aspect_ratio=True,
-            crop_size=args.input_size,
-            short_side_size=args.short_side_size,
-            new_height=256,
+            crop_size=args.input_size,    # renyu: 要裁剪原视频到符合网络输入的（一般224）
+            short_side_size=args.short_side_size,    # renyu: 裁剪前先resize视频短边为指定值
+            new_height=256,    # renyu: TODO: 这个似乎是解码后视频统一设置的分辨率，但固定值会导致高清视频被降低分辨率吗？
             new_width=320,
             args=args)
         

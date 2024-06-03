@@ -10,7 +10,7 @@ from numpy.lib.function_base import disp
 import torch
 from torchvision import transforms
 import warnings
-from decord import VideoReader, cpu
+from decord import VideoReader, cpu    # renyu: AWS的视频解码库，可以简单地解码视频获得一组帧
 from torch.utils.data import Dataset
 from .random_erasing import RandomErasing
 from .video_transforms import (
@@ -72,9 +72,12 @@ class VideoClsDataset_sparse(Dataset):
         if has_client:
             self.client = Client('~/petreloss.conf')
 
+        # renyu: 训练模式下要做一堆数据增强的，不在初始化时处理
         if (mode == 'train'):
             pass
 
+        # renyu: 跑验证集的准备，定义一个多步骤的预处理方法：
+        #        按指定短边长度缩放（224），中心裁剪指定大小正方形（224*224），转为张量，归一化
         elif (mode == 'validation'):
             self.data_transform = Compose([
                 Resize(self.short_side_size, interpolation='bilinear'),
@@ -83,6 +86,7 @@ class VideoClsDataset_sparse(Dataset):
                 Normalize(mean=[0.485, 0.456, 0.406],
                                            std=[0.229, 0.224, 0.225])
             ])
+        # renyu: 跑测试集的准备，定义缩放、转换，并初始化好存储用的List
         elif mode == 'test':
             self.data_resize = Compose([
                 Resize(size=(short_side_size), interpolation='bilinear')
@@ -107,6 +111,7 @@ class VideoClsDataset_sparse(Dataset):
         if self.mode == 'train':
             args = self.args 
 
+            # renyu: 首先读取视频获得指定数量的帧
             sample = self.dataset_samples[index]
             buffer = self.loadvideo_decord(sample, chunk_nb=-1) # T H W C
             if len(buffer) == 0:
@@ -116,6 +121,7 @@ class VideoClsDataset_sparse(Dataset):
                     sample = self.dataset_samples[index]
                     buffer = self.loadvideo_decord(sample, chunk_nb=-1)
 
+            # renyu； 然后进行数据增强并且调整匹配输入
             if args.num_sample > 1:
                 frame_list = []
                 label_list = []
@@ -178,6 +184,7 @@ class VideoClsDataset_sparse(Dataset):
         else:
             raise NameError('mode {} unkown'.format(self.mode))
 
+    # renyu: 数据增强处理，仅对于训练集使用
     def _aug_frame(
         self,
         buffer,
@@ -239,6 +246,9 @@ class VideoClsDataset_sparse(Dataset):
 
         return buffer
 
+    # renyu: 从video_size帧中采样num_frames帧，实现一整个视频转为固定数量的图片序列
+    #        做法也很简单，先均匀分成num_frames段，然后每一段中随机抽1帧（输入clip_idx=-1)
+    #        还支持在测试阶段设置不同的参数clip_idx，这个似乎是指定每一段中取第几帧（应该是固定间隔了）
     def _get_seq_frames(self, video_size, num_frames, clip_idx=-1):
         seg_size = max(0., float(video_size - 1) / num_frames)
         max_frame = int(video_size) - 1
@@ -262,6 +272,8 @@ class VideoClsDataset_sparse(Dataset):
                 seq.append(idx)
         return seq
 
+    # renyu: 从视频文件目录读取指定视频文件，会解码成一系列帧返回
+    #        TODO: 默认分辨率应该是和原视频一致，这里VideoReader指定了应该是重新缩放成统一的
     def loadvideo_decord(self, sample, chunk_nb=0):
         """Load video content using Decord"""
         fname = sample
@@ -288,6 +300,7 @@ class VideoClsDataset_sparse(Dataset):
                     vr = VideoReader(fname, width=self.new_width, height=self.new_height,
                                     num_threads=1, ctx=cpu(0))
 
+            # renyu: 这里是从全部视频帧中采样指定的帧数（例如最小模型的8帧）
             all_index = self._get_seq_frames(len(vr), self.clip_len, clip_idx=chunk_nb)
             vr.seek(0)
             buffer = vr.get_batch(all_index).asnumpy()
@@ -302,7 +315,7 @@ class VideoClsDataset_sparse(Dataset):
         else:
             return len(self.test_dataset)
 
-
+# renyu: 非常重要的一步预处理，空域采样就是对任意分辨率的输入图像，通过缩放、裁剪、翻转，得到匹配输入的图像分辨率
 def spatial_sampling(
     frames,
     spatial_idx=-1,

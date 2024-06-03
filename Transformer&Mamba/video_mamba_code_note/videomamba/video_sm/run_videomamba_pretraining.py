@@ -1,3 +1,6 @@
+# renyu: 这个代码是VideoMamba跑自监督预训练的main函数，实现了VideoMamba效果最好的Mask版本
+#        TODO: 应该是参考了VideoMAE的Mask自监督预训练和UMT的有Teacher Model的自监督预训练，需要分析下具体实现
+#              并且做了自动混合精度AMP的处理
 import argparse
 import datetime
 import numpy as np

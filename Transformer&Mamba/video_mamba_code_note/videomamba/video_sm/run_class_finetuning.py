@@ -1,4 +1,5 @@
 # renyu: 跑单模态视频分类任务的main函数
+#        加了finetuning后缀很合理，因为这里的训练都是基于ImageNet-1k预训练模型做的，和直接训练/自监督训练的方法区分开
 import argparse
 import datetime
 import numpy as np

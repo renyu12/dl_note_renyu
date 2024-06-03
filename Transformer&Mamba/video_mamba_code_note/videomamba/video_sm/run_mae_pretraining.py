@@ -1,3 +1,6 @@
+# renyu: 可以忽略这个代码，看名字是用来跑MAE自监督预训练的main函数，但实际上VideoMamba中未使用
+#        实际预训练用的是run_videomamba_pretraining.py
+#        查了下这个是从VideoMAE贴过来作为作为参考的一个代码
 import argparse
 import datetime
 import numpy as np

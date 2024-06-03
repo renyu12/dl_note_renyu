@@ -1,3 +1,6 @@
+# renyu: 跑单模态视频回归任务的main函数，对标最主要的run_class_finetuning.py
+#        视频中的回归任务感觉还比较少见，这里是LVU数据集9项任务中有一个Like Ratio视频受喜欢的比例是回归的，用到了
+#        对比和run_class_finetuning的区别，主要是没做Mixup数据增强、loss函数改为MSE（这里要改多处，包括每一轮更新检查点）
 import argparse
 import datetime
 import numpy as np
