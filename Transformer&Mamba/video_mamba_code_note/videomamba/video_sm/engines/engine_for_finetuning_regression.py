@@ -8,6 +8,8 @@ import torch
 import torch.distributed as dist
 from timm.utils import ModelEma
 import utils
+from scipy.stats import spearmanr, pearsonr    # renyu: 调库计算SROCC，PLCC
+from scipy.stats.stats import kendalltau as kendallr    # renyu: 调库计算KROCC
 
 
 def train_class_batch(model, samples, target, criterion):
@@ -213,6 +215,8 @@ def final_test(data_loader, model, device, file, amp_autocast, ds=True, no_amp=F
         target = target.to(device, non_blocking=True).to(torch.float32)
 
         # compute output
+        # renyu: ds是是否使用deepspeed训练框架的标志位，也是分开处理deepspeed和自动混合精度amp的一些处理
+        #        做了前向传播预测结果，并且计算loss
         if ds:
             if not no_amp:
                 videos = videos.bfloat16() if bf16 else videos.half()
@@ -245,7 +249,7 @@ def final_test(data_loader, model, device, file, amp_autocast, ds=True, no_amp=F
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
-
+# renyu: 读取 '分布式进程id.txt' 的测试集预测日志，格式为从2行开始都是"文件名 预测值 标签实际值 时域采样序号 空域采样序号"
 def merge(eval_path, num_tasks):
     dict_feats = {}
     dict_label = {}
@@ -282,7 +286,23 @@ def merge(eval_path, num_tasks):
     ans = p.map(compute_video, input_lst)
     mse_loss = [x[0] for x in ans]
     final_loss = np.mean(mse_loss)
-    return final_loss
+
+    # renyu: 额外加SROCC、PLCC、KROCC的计算
+    #        都是先拿到所有预测值和计算值，然后由此分析两个变量之间的关联
+    all_avg_feats = []
+    all_labels = []
+    for name in dict_feats:
+        avg_feat = np.mean(dict_feats[name])    # renyu: 由于测试时对一个视频做了超级加倍，4个时域采样*3个空域采样，最后12个值取均值
+        all_avg_feats.append(avg_feat)
+        all_labels.append(dict_label[name])
+
+    # renyu: 直接调库计算SROCC、PLCC、KROCC，第二个返回值是相关系数可以忽略
+    srocc, _ = spearmanr(all_avg_feats, all_labels)
+    plcc, _ = pearsonr(all_avg_feats, all_labels)
+    krocc, _ = kendallr(all_avg_feats, all_labels)
+    print(f"The SROCC, PLCC, KROCC of the dataset is {srocc:.3f} {plcc:.3f} {krocc:.3f}.")
+
+    return final_loss, srocc, plcc, krocc
 
 def compute_video(lst):
     i, video_id, data, label = lst

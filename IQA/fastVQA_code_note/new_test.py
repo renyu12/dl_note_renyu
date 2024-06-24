@@ -1,3 +1,5 @@
+# renyu: FastVQA跑测试集代码，启动命令python new_test.py -o [YOUR_OPTIONS]
+#        需要在启动options的yaml配置文件中做好所有运行配置
 import torch
 import cv2
 import random
@@ -33,7 +35,7 @@ def rescale(pr, gt=None):
 
 sample_types=["resize", "fragments", "crop", "arp_resize", "arp_fragments"]
 
-
+# renyu: 使用thop库的profile方法统计网络的FLOPs浮点运算数和params参数量
 def profile_inference(inf_set, model, device):
     video = {}
     data = inf_set[0]
@@ -46,6 +48,7 @@ def profile_inference(inf_set, model, device):
         flops, params = profile(model, (video, ))
     print(f"The FLOps of the Variant is {flops/1e9:.1f}G, with Params {params/1e6:.2f}M.")
 
+# renyu: 进行推理并计算SROCC PLCC KROCC RMSE指标
 def inference_set(inf_loader, model, device, best_, save_model=False, suffix='s', set_name="na"):
     print(f"Validating for {set_name}.")
     results = []
@@ -129,6 +132,7 @@ def inference_set(inf_loader, model, device, best_, save_model=False, suffix='s'
 
 def main():
 
+    # renyu: 启动就一个-o yaml配置文件路径的参数，所有的具体配置都写在yaml配置文件里，读取一下到opt变量里，后面查opt即可
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-o", "--opt", type=str, default="./options/fast/fast-b.yml", help="the option file"
@@ -151,10 +155,13 @@ def main():
 
     bests_ = []
     
+    # renyu: 根据配置文件中配置的模型类型和模型参数初始化模型，写入GPU
     model = getattr(models, opt["model"]["type"])(**opt["model"]["args"]).to(device)
-
+    
+    # renyu: 根据配置文件中的跑测试集的训练好的模型checkpoint位置加载预训练模型
     state_dict = torch.load(opt["test_load_path"], map_location=device)["state_dict"]
     
+    # renyu: 如果配置了test_load_path_aux再同时加载一个增强的预训练网络，需要调整两个网络的参数名字，合并成一个混合预训练
     if "test_load_path_aux" in opt:
         aux_state_dict = torch.load(opt["test_load_path_aux"], map_location=device)["state_dict"]
         
@@ -184,6 +191,7 @@ def main():
 
     model.load_state_dict(state_dict, strict=True)
     
+    # renyu: 读取数据集配置，只要含有val和test字段的数据集都跑一遍
     for key in opt["data"].keys():
         
         if "val" not in key and "test" not in key:
@@ -203,7 +211,7 @@ def main():
         )
 
 
-
+        # renyu: 先统计下FLOPs和参数量，对于不同数据集可能预处理步骤不同会不一样？
         profile_inference(val_dataset, model, device)
 
         # test the model
@@ -211,7 +219,7 @@ def main():
 
         best_ = -1, -1, -1, 1000
 
-
+        # renyu: 进行推理并计算SROCC PLCC KROCC RMSE指标
         best_ = inference_set(
             val_loader,
             model,

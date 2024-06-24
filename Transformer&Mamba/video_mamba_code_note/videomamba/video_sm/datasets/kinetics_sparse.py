@@ -99,6 +99,7 @@ class VideoClsDataset_sparse(Dataset):
             self.test_seg = []
             self.test_dataset = []
             self.test_label_array = []
+            # renyu: 这里对测试集做了超级加倍，例如test_num_segment 4, test_num_crop 3就是时域采4个（分段取第1-4帧），空域采3个（3次裁剪不同位置）
             for ck in range(self.test_num_segment):
                 for cp in range(self.test_num_crop):
                     for idx in range(len(self.label_array)):
@@ -150,6 +151,7 @@ class VideoClsDataset_sparse(Dataset):
             buffer = self.data_transform(buffer)
             return buffer, self.label_array[index], sample.split("/")[-1].split(".")[0]
 
+        # renyu: 测试阶段要较多的数据采样，实现更全面的测试，所以取数据的时候根据时域&空域采样的序号，进行额外的采样处理生成一个数据
         elif self.mode == 'test':
             sample = self.test_dataset[index]
             chunk_nb, split_nb = self.test_seg[index]
