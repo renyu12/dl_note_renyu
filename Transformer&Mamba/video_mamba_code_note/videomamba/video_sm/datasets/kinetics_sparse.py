@@ -120,7 +120,7 @@ class VideoClsDataset_sparse(Dataset):
                     warnings.warn("video {} not correctly loaded during training".format(sample))
                     index = np.random.randint(self.__len__())
                     sample = self.dataset_samples[index]
-                    buffer = self.loadvideo_decord(sample, chunk_nb=-1)
+                    buffer = self.loadvideo_decord(sample, chunk_nb=-1)   # renyu: chunk_nb=-1是每段随机采样，训练时随机即可
 
             # renyu； 然后进行数据增强并且调整匹配输入
             if args.num_sample > 1:
@@ -147,7 +147,7 @@ class VideoClsDataset_sparse(Dataset):
                     warnings.warn("video {} not correctly loaded during validation".format(sample))
                     index = np.random.randint(self.__len__())
                     sample = self.dataset_samples[index]
-                    buffer = self.loadvideo_decord(sample, chunk_nb=0)
+                    buffer = self.loadvideo_decord(sample, chunk_nb=0)    # renyu: chunk_nb=0是每段从首帧采样，保持一致性
             buffer = self.data_transform(buffer)
             return buffer, self.label_array[index], sample.split("/")[-1].split(".")[0]
 
@@ -163,7 +163,7 @@ class VideoClsDataset_sparse(Dataset):
                 index = np.random.randint(self.__len__())
                 sample = self.test_dataset[index]
                 chunk_nb, split_nb = self.test_seg[index]
-                buffer = self.loadvideo_decord(sample, chunk_nb=chunk_nb)
+                buffer = self.loadvideo_decord(sample, chunk_nb=chunk_nb)    # renyu: chunk_nb做了特别设置切换起始位置采好多份，但也是固定位置保持测试一致性
 
             buffer = self.data_resize(buffer)
             if isinstance(buffer, list):

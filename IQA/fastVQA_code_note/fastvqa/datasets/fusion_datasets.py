@@ -19,9 +19,10 @@ random.seed(42)
 
 decord.bridge.set_bridge("torch")
 
-
+# renyu: 新版本的数据集加载方法，封装的更好了，把各种预处理方法都在一个FusionDataset类里面支持了，可以根据配置去选择实现方法
+#        （还是没有mmaction2、videomamba那种直接支持流水线处理的极其灵活的封装牛，也还可以了，代码量少一些）
     
-
+# renyu: 相比旧版本的网格采样多了个random_upsample随机上采样
 def get_spatial_fragments(
     video,
     fragments_h=7,
@@ -153,6 +154,7 @@ def get_resized_video(
     video = resize_opt(video).permute(1,0,2,3)
     return video
 
+# renyu: arp_resize指的是宽高比不变的resize
 def get_arp_resized_video(
     video,
     short_edge=224,
@@ -213,7 +215,7 @@ def get_cropped_video(
     kwargs["fsize_h"], kwargs["fsize_w"] = size_h, size_w
     return get_spatial_fragments(video, **kwargs)
 
-
+# renyu: 这里是对于输入的一帧做指定的预处理，支持了resize、arp_resize、fragmemts、arg_fragments、crop、不处理 方法做对比
 def get_single_sample(
     video,
     sample_type="resize",
@@ -268,7 +270,7 @@ def get_spatial_samples(
                                                        **arg)
     return sampled_video
 
-
+# renyu: 整体采样的入口方法，FusionDataset的getitem里就直接调用了这个方法去获得一个视频的采样结果
 def get_spatial_and_temporal_samples(
     video_path,
     sample_types,
@@ -309,7 +311,7 @@ def get_spatial_and_temporal_samples(
                                                        **sopt)
     return sampled_video, frame_inds
         
-
+# renyu: 还是mmaction2的时域采样类，同旧版
 class SampleFrames:
     def __init__(self, clip_len, frame_interval=1, num_clips=1):
 
@@ -396,6 +398,7 @@ class SampleFrames:
 import numpy as np
 import random
 
+# renyu: 还是FasterVQA的分段时域采样类，这里升级了一下，其实算是兼容了Faster和Fast的方法
 class FragmentSampleFrames:
     def __init__(self, fsize_t, fragments_t, frame_interval=1, num_clips=1, drop_rate=0., ):
 
@@ -445,6 +448,7 @@ class FragmentSampleFrames:
         frame_inds = np.mod(frame_inds + start_index, total_frames)
         return frame_inds.astype(np.int32)
 
+# renyu: 这个可以忽略，用的就是mmaction2经典时域采样的Dataloader（空域还是一样的）
 class SimpleDataset(torch.utils.data.Dataset):
     def __init__(self, opt):
         ## opt is a dictionary that includes options for video sampling
@@ -503,7 +507,7 @@ class SimpleDataset(torch.utils.data.Dataset):
         return len(self.video_infos)
     
     
-
+# renyu: 基本上都是用的这个DataLoader了，融合了各种数据处理方法，配置去修改，比较统一了
 class FusionDataset(torch.utils.data.Dataset):
     def __init__(self, opt):
         ## opt is a dictionary that includes options for video sampling
@@ -605,6 +609,7 @@ class FusionDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.video_infos)
     
+# renyu: kinetics-400数据集的处理，这里就是拿Kinetics-400数据集测试下采样的效果，可以参考FasterVQA论文
 class FusionDatasetK400(torch.utils.data.Dataset):
     def __init__(self, opt):
         ## opt is a dictionary that includes options for video sampling
@@ -712,6 +717,7 @@ class FusionDatasetK400(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.video_infos)
     
+# renyu: TODO: 这是什么处理？
 class LSVQPatchDataset(torch.utils.data.Dataset):
     def __init__(self, opt):
         ## opt is a dictionary that includes options for video sampling

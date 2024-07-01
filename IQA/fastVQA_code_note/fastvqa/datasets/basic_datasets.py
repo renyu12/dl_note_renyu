@@ -14,7 +14,16 @@ random.seed(42)
 
 decord.bridge.set_bridge("torch")
 
+# renyu: 这里是旧版本的数据集加载方法，封装的不太好实际没有使用，被另一个升级版的fusion_dataset.py替代了，但是可以参考学习
+#        给出了多种视频数据预处理的DataLoader实现进行对比，最核心的还是FastVQA中的fragment网格采样方法
+#        整个代码的结构是：
+#            1.先给出了1个空域GMS网格采样的方法get_spatial_framgent
+#            2.给出了2个时域帧采样方法类，一个是Faster-VQA加了分段时域采样处理的采样类FragmentSampleFrames，一个是分段连续时域采样的SampleFrames
+#            3.给出了4个视频数据DataLoader，1个是用了分段时域采样的FastVQAPlusPlusDataset，其他3个是用普通采样的FragmentVideoDataset
+#            4.还有3个图像数据Loader可以忽略
 
+# renyu: Fast-VQA最核心的GMS (Grid Mini-patch Sampling)空域采样实现
+#        默认是图像分成7*7的网格，每个网格里采样32*32的一个小块，拼起来就是224*224
 def get_spatial_fragments(
     video,
     fragments_h=7,
@@ -106,7 +115,7 @@ def get_spatial_fragments(
     # target_video = target_video.reshape((-1, dur_t,) + size) ## Splicing Fragments
     return target_video
 
-
+# renyu: FasterVQA的时域采样，实现很简单，平均分fragments_t段后，每段里随机起点（不能越界）按frame_interval间隔采fsize_t帧
 class FragmentSampleFrames:
     def __init__(self, fsize_t, fragments_t, frame_interval=1, num_clips=1):
 
@@ -146,7 +155,7 @@ class FragmentSampleFrames:
         frame_inds = np.mod(frame_inds + start_index, total_frames)
         return frame_inds
 
-
+# renyu: 这个是mmaction2的时域采样实现，分成num_clips段，然后每一段内随机一个起始位置，连续采样clip_len帧，间隔为frame_interval
 class SampleFrames:
     def __init__(self, clip_len, frame_interval=1, num_clips=1):
 
