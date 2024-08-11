@@ -207,8 +207,37 @@ VQA任务的主观性很强，如果不同用户有不同的评判标准（尤�
   
 # 论文整理  
 ## VQA  
-### （21.12.16上交 BVQA）Blindly Assess Quality of In-the-Wild Videos via Quality-Aware Pre-Training and Motion Perception  
-应该得到了结论是在IQA数据集和动作识别数据集上预训练的模型迁移到VQA任务中是有效的。  
+有很多早期的模型现在看来指标都比较差了，所以没有往前看很多，可能会漏掉一些有意义的idea，有机会再看吧。整体看近年的论文大都是在采样方法上做文章，还是有很多相通之处的。  
+### （19.10.5北大 VSFA）  
+问题：VQA有时间滞后效应，人会记住历史的低质量帧然后降低对后续帧的评分，需要考虑长期依赖关系  
+方法：先使用CNN提取每一帧的内容特征，每一帧的特征按时间顺序输入到GRU中，使用GRU来解决对历史帧记忆的问题。最终的评分还经过了各个时刻GRU输出结果做池化  
+想法：这个处理时间滞后效应问题的想法挺有意思的，给出了用RNN模型的理由。但是从现在的视角看这个问题似乎也没有那么重要，毕竟这里早期模型指标跑出来挺一般的，有点硬加了下GRU的感觉，现在应该很多ViT的模型有多帧信息都是可以处理一点长期依赖的  
+### （20.11.27德州大学）Patch-VQ 'Patching Up' the Video Quality Problem  
+就是带了LSVQ数据集的经典早期文章。同时做了个PVQ模型，应该说是稍微粗糙的一个经典baseline，基本上后续模型对比都会看到。  
+文章中有个很重要的结论，就是视频global和local的主观评分是比较相关的，算是空域&时域采样的理论基础了。具体分析方式是做数据集的时候，搞了3w+的原始视频，又使用非常初级的三种空域时域采样方法得到了3倍的patch，分别MOS评分判断相关性。采样方法有：空域采样（时域不采样，空域随机crop 16%面积，SRCC=0.69）；时域采样（空域不采样，时间随机连续的40%，SRCC=0.77）；时空域采样（前面的空域采样+时域采样一起做，SRCC=0.67）  
+  
+一 关于数据集  
+强调了UGC视频有各种时空域的短暂失真，包括丢帧、焦点变化、传输故障，而现有UGC数据集太小覆盖不了多少情况。所以做了一个目前最大的UGC数据集。  
+二 关于PVQ模型  
+这个模型的结构看起来略显复杂，但实际上和后续的SimpleVQA基本是一致的，只是当时还没有那么清晰的思路说一路输入2D帧取空域内容&纹理特征，一路输入低清3D取时域动作特征。  
+具体到细节上是用PaQ2PiQ网络提取2D的视频特征，ResNet3D网络提取3D的视频特征，然后做了ROI和SOI的池化（这个效果如何值得分析下），最后用一个InceptionTime时间序列回归模型来给回归得分。  
+  
+想法：SimpleVQA对比这个，差不多就是升级了2D和3D视频特征提取网络的Backbone，改为了，池化和回归好像都做的更加简单一些，我觉得是一个非常好的结构设计。  
+### （21.6.22港城大 GST-VQA） Learning Generalized Spatial-Temporal Deep Feature Representation for No-Reference Video Quality Assessment  
+这个好像后面模型对比的少一些，主要的思路是想提取多尺度特征，从而可以适配不同分辨率，不同时长的视频输入。  
+我觉得比较特别的点是网络结构设计的好像稍有点复杂，我有点没太看明白，大概是VGG16->Transformer->MLP->GRU，认为这样子有空域的多尺度特征，然后对于GRU输出的多帧时域结果，训练阶段还做了高斯正则化，测试时还做了金字塔特征聚合，可能对短期长期的时域影响处理的更好。  
+因为最后指标跑出来一般般，这个模型不细分析了，往多尺度的思路去思考还是可以的。  
+  
+### （21.8.19上交 BVQA）Blindly Assess Quality of In-the-Wild Videos via Quality-Aware Pre-Training and Motion Perception  
+SimpleVQA的前身，大体思路是相似的。  
+还得到了结论是在IQA数据集和动作识别数据集上预训练的模型迁移到VQA任务中是有效的。  
+### （21.8广州大学）StarVQA Space-Time Attention for Video Quality Assessment  
+算比较早用纯ViT的模型，创新性上倒是没啥特别的地方。看是直接随机crop224x224然后输入ViT了，指标跑出来在大数据集LSVQ上挺好的，小数据集上就比较差，毕竟ViT。  
+如果需要对比ViT Backbone的话可以看下这个代码。  
+### （21.10挪威研究中心 LSCT-PHIQ）Long Short-term Convolutional Transformer for No-Reference VQA  
+用了两个看起来结构很复杂的网络，跑了KoNViD和Youtube UGC指标挺不错的。TODO  
+先是PHIQNet，是一种考虑了多尺度的CNN，提取出考虑多尺度的特征。  
+然后是Long short-term convolutional transformer，长短期卷积Transfomer？  
   
 ### （22.6.6 NTU）FAST-VQA: Efficient End-to-end Video Quality Assessment with Fragment Sampling  
 问题：主要解决了VQA中高清视频数据量过大，计算开销高的问题  
@@ -219,11 +248,26 @@ VQA任务的主观性很强，如果不同用户有不同的评判标准（尤�
 * FANet网络  
 backbone用的是4层注意力层的Swin-T网络，但还要做一点调整。主要问题是大补丁毕竟是硬拼起来，小补丁内Intra-patch像素关联强，小补丁之间cross-patch像素关联弱。所以，一是做注意力计算的时候要有所区分，加一个偏差值隔开不同小补丁；二是不能先池化再非线性回归（这是激活函数吗？）会把小补丁混了，顺序改成先非线性回归再池化。  
   
-想法：这样很小的采样又硬拼在一起，相比更早的方法直观感觉是增加了细节纹理的权重、削弱了全局语义的权重，也能取得很好的效果，应该说明了目前的质量评分基本上还是以局部细节纹理为主吧。  
+想法：这样很小的采样又硬拼在一起，相比更早的方法直观感觉是增加了细节纹理的权重、削弱了全局语义的权重，也能取得很好的效果，这一点是挺令人惊讶的，应该说明了目前的质量评分基本上还是以局部细节纹理为主吧。  
+但是由于随机采样引入了评分结果不稳定的问题，只有在整体数据集上统计表现不错，但对于具体单个视频误差较大。  
+  
+22.10的Faster-VQA又在时域采样上搞了点操作说是时域的网格采样，但是个人觉得没什么意思，和普通的时域采样没明显区别。  
+  
+### （22.6.20 NTU） DisCoVQA: Temporal Distortion-Content Transformers for Video Quality Assessment  
+问题： 时域失真（shaking、 flicker、abrupt scene transitions）如果仅仅是固定时域采样的话难检测，需要重点关注时域失真的VQA模型  
+方法：  
+通过一个Transfomer提取时域失真（TODO：怎么实现的？是每一帧都输入吗）并获取每一帧的质量评分，这个Transfomer的输出再输入到另一个Transfomer进行内容的分析给出每一帧的质量权重，加权得到最终评分。  
+这样的做法明显就是给了时域质量更多的权重，看起来指标一般吧，可能还是需要时域失真比较明显的数据集才能有明显优势。  
+  
+### （22.10.9广州大学 HVS-5M）HVS Revisited: A Comprehensive Video Quality Assessment Framework  
+拼了5个模块提取5种特征输出最后的总分，指标也还不错，这几个特征可以关注下，也是比较直接的加人工特征的方式。TODO  
+用的Motion Perception、Temporal hysteresis、Content dependency、Visual saliency、Edge masking  
   
 ### （22.10.20上交 SimpleVQA）A DeepLearning based No-reference Quality Assessment Model for UGCVideos  
-和FastVQA一样也是目前VQA的经典模型。  
-核心点是在预处理采样的时候，分了两个路径。空域采样就是一个片段采一个完整的原始帧送入Swin Transformer提取空域特征，时域采样是这个片段全部帧但是resize到非常低的分辨率，送入SlowFast提取时域信息（应该是动作识别一类的结果）。最终两部分特征再合起来经过一个MLP得到最终评分。  
+和FastVQA一样也是目前VQA的经典模型，值得学习。  
+核心点是在预处理采样的时候，分了两个路径，一个是高清少帧数的一路看细节纹理，一个是低清高帧数的一路看动作内容。  
+空域采样就是采少量分辨率较高的帧520x520再中心crop到448x448，送入ResNet50提取空域特征,。  
+时域采样是这个片段全部帧但是resize到低的分辨率224x224，送入SlowFast提取时域信息（应该是动作识别一类的结果）。最终两部分特征再合起来经过一个MLP得到最终评分。  
   
 ### （22.11.9 NTU DOVER）Exploring Video Quality Assessment on User Generated Contents from Aesthetic And Technical Perspectives  
 问题：之前的VQA只关注了技术角度的质量评分  
@@ -233,17 +277,36 @@ backbone用的是4层注意力层的Swin-T网络，但还要做一点调整。�
 * 提出了DOVER视频质量评估模型  
 就是分了两路分别计算技术评分和审美评分  
 TODO：DOVER具体网络设计，我理解技术分应该还是类似Fast-VQA的处理，审美分主要依赖全局语义可以做下采样，但是提了个Cross-scale Regularization没看懂是什么，不同尺度下采样之间比较吗？  
+  
+### （23.4 NTIRE VQA竞赛）NTIRE 2023 QA of Video Enhancement Challenge  
+淘宝团队基于SimpleVQA的模型拿了冠军，在数据增强上做了比较多。TODO：需要借鉴下  
+### （23.4.19上交）MD-VQA Multi-Dimensional Quality Assessment for UGC Live Videos  
+TODO  
+  
 ### （23.5.22 NTU MaxVQA）Towards Explainable In-the-Wild Video Quality Assessment: A Database and a Language-Prompted Approach  
 基于DOVER时搞的DIVIDE-3k数据集，又扩展了评分的维度，本来只有审美评分+技术评分+整体分，又对数据集里4543个视频收集了200w+的文本评价，把这些评价转换成了13个维度的评分。这个数据集确实是个极大的亮点，借助文本语义的信息来解决原本视频质量只有技术评分的问题。  
 提出了MaxVQA，这里的Max指的是多维度。  
 TODO：网络设计需要再看下，技术分还是用了Fast-VQA，其他语义评分的处理用了做多模态的CLIP  
+### （23.7快手 VQT） Capturing Co-existing Distortions in  User-Generated Content for No-reference Video  Quality Assessment  
+TODO  
+  
 ### （23.12.28 NTU）Q-ALIGN: Teaching LMMs for Visual Scoring via Discrete Text-Defined Levels  
 使用多模态大模型，输入是图像和文字问题（评分如何？），输出是5个主观评分级别。训练后可以实现利用大模型来做主观评分，并且同时支持图像质量、图像美学、视频质量的评分。  
 ### （24.2.20快手 KSVQE）KVQ:KwaiVideo Quality Assessment for Short-form Videos  
 应该是目前的SOTA，在FastVQA网格采样的基础上，又加了两个旁路网络，一个是获得不同分块的权重（似乎还有内容识别），一个是检查一些形变失真（这个听起来没啥意思）。  
 TODO：这个要认真分析下。  
   
+### （24.2.29港城大）Modular Blind Video Quality Assessment  
+CVPR 2024  
+还是个集成3个模型的VQA模型～  
+目前的VQA模型比较难处理的一个问题就是整个视频输入进去太大了没办法处理，无论原视频多大，固定时域采样只取8/16/32帧，空域采样每一帧裁剪/网格采样到224x224，这样就会丢时域和空域的信息，一些失真就发现不了（但从公开数据集上的跑分看，采样很少依然效果不错）。按说视频分辨率帧率越高采样损失就越多，所以很多模型就会提一些方法来找补。这里是：  
+1. 还是用个普通VQA模型，时域空域都采样（文中的基础质量预测器）  
+2. 加一个空域不采样、时域采样的VQA模型，也不是输入全图，是算了全图的拉普拉斯金字塔做特征（文中的空间整流器）  
+3. 加一个时域不采样、空域采样的的VQA模型，可以多输入一些连续帧了（文中的时间整流器）  
+最后拿2、3模型的输出矫正1模型的输出，思路挺清楚的，理论上能发现一些别的模型发现不了的问题，就是在大部分公开数据集上刷分看提升不大，在4K、120Hz这种高分辨率高帧率的数据集上效果好，但复杂度估计也挺高  
 ### （24.4.17快手组织竞赛论文）NTIRE 2024 ChallengeonShort-form UGC Video Quality Assessment: Methods and Results  
 可以看到很多魔改模型的思路去借鉴。因为卷的是准确率，所以基本上都是多模型在一通拼，魔改的会很复杂。  
 第一名是上交SimpleVQA作者和NTU FastVQA作者的联队，这有点欺负人了，直接把SimpleVQA和FastVQA的结果组合了，还附加了Q-Align和LIQE两个模型的结果一起，4个拼在一块很强。  
 但是整体看下来没有什么新的东西，毕竟是刷分的比赛，基本都是流行的这几个主流模型去一通合并，不过也可以看出来FastVQA（含Dover）、SimpleVQA、Q-Align等几个模型是经过检验的模型。  
+### （24.5快手 PTM-VQA） PTM-VQA: Efficient Video Quality Assessment Leverage Diverse PreTrained Models from the Wild  
+TODO

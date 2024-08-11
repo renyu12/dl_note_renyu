@@ -124,6 +124,9 @@ class Bottleneck(nn.Module):
         return out
 
 
+# renyu: 注意这里不是原版的ResNet了，这个命名不太好，容易引发误会，可读性不好……
+#        其实是一边接收2D Frames特征输入，过一个ResNet50得到Spatial特征，然后和另一边接收到的3D motion特征连一起，过一个MLP做regression得到多帧结果
+#        最后多帧输出平均池化一下得到最终评分
 class ResNet(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
@@ -299,6 +302,7 @@ def resnet34(pretrained=False, progress=True, **kwargs):
     return model
 
 
+# renyu: 准备了各种size的resnet，最后反正固定用的resnet50，其他的可忽略
 def resnet50(pretrained=False, progress=True, **kwargs):
     r"""ResNet-50 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_

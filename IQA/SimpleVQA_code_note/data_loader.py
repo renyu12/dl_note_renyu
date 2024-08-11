@@ -125,7 +125,7 @@ class VideoDataset_images_with_motion_features(data.Dataset):
 
         transformed_video = torch.zeros([video_length_read, video_channel, video_height_crop, video_width_crop])             
 
-
+        # renyu: 读取2D Frames，就是预处理中extract的每个视频8帧图像文件
         for i in range(video_length_read):
             imge_name = os.path.join(path_name, '{:03d}'.format(i) + '.png')
             read_frame = Image.open(imge_name)
@@ -134,6 +134,7 @@ class VideoDataset_images_with_motion_features(data.Dataset):
             transformed_video[i] = read_frame
 
         # read 3D features
+        # renyu: 这里的3D特征/motion特征/SlowFast特征就是原始视频过SlowFast预训练网络得到的numpy数组，在extract_SlowFast_features脚本里预处理得到的
         if self.feature_type == 'Slow':
             feature_folder_name = os.path.join(self.data_dir_3D, video_name_str)
             transformed_feature = torch.zeros([video_length_read, 2048])
@@ -166,7 +167,7 @@ class VideoDataset_images_with_motion_features(data.Dataset):
                 feature_3D = torch.cat([feature_3D_slow, feature_3D_fast])
                 transformed_feature[i] = feature_3D
 
-       
+        # renyu: 2D帧和motion特征一起返回
         return transformed_video, transformed_feature, video_score, video_name
 
     

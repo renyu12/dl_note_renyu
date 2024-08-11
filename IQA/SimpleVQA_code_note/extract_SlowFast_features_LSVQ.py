@@ -38,7 +38,7 @@ def pack_pathway_output(frames, device):
 
     return frame_list
 
-
+# renyu: 获得一个预训练好的SlowFast网络用于输入原视频提取motion特征，直接pretrained=True加载的pytorch中准备好的预训练模型
 class slowfast(torch.nn.Module):
     def __init__(self):
         super(slowfast, self).__init__()
@@ -89,6 +89,7 @@ def main(config):
     datainfo_train = 'data/LSVQ_whole_train.csv'
     datainfo_test = 'data/LSVQ_whole_test.csv'
     datainfo_test_1080p = 'data/LSVQ_whole_test_1080p.csv'
+    # renyu: 对于可以低清的motion特征，resize就是搞成224*224了，和另一边2D Frame用的520*520再中心crop 448*448形成对比
     transformations_test = transforms.Compose([transforms.Resize([resize, resize]),transforms.ToTensor(),\
         transforms.Normalize(mean = [0.45, 0.45, 0.45], std = [0.225, 0.225, 0.225])])
     trainset = VideoDataset_NR_LSVQ_SlowFast_feature(videos_dir, datainfo_train, transformations_test, resize)
@@ -119,6 +120,7 @@ def main(config):
                 ele = ele.permute(0, 2, 1, 3, 4)
                 inputs = pack_pathway_output(ele, device)
                 slow_feature, fast_feature = model(inputs)
+                # renyu: 模型输出的Slow特征和Fast特征直接存成numpy数组文件，后面的模型再读取作为输入，能省点处理步骤
                 np.save(config.feature_save_folder + video_name + '/' + 'feature_' + str(idx) + '_slow_feature', slow_feature.to('cpu').numpy())
                 np.save(config.feature_save_folder + video_name + '/' + 'feature_' + str(idx) + '_fast_feature', fast_feature.to('cpu').numpy())
                 

@@ -19,6 +19,8 @@ def main(config):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # renyu: 读取预训练模型，注意这里的预训练模型是Spatial Feature提取的resnet50加上最后的两层MLP回归模型，对应论文框图的下边和右边部分
+    #        可以看UGC_BVQA_model.py代码，不是原始的resnet50
     if config.model_name == 'UGC_BVQA_model':
         print('The current model is ' + config.model_name)
         model = UGC_BVQA_model.resnet50(pretrained=False)
@@ -32,7 +34,7 @@ def main(config):
     model.load_state_dict(torch.load(config.trained_model))
 
 
-
+    # renyu: 直接支持的测试集包括LSVQ测试集、KoNViD和Youtube UGC，预先准备好提取的帧和SlowFast网络输出特征就可以
     if config.database == 'LSVQ_test':
         datainfo_test = 'data/LSVQ_whole_test.csv'
         videos_dir = os.path.join(config.data_path, 'LSVQ_image')
@@ -46,7 +48,7 @@ def main(config):
         videos_dir = os.path.join(config.data_path, 'youtube_ugc/youtube_ugc_image')
         feature_dir = os.path.join(config.data_path, 'outube_ugc/youtube_ugc_SlowFast_feature/')
 
-
+    # renyu: 这里是2D Frame要做的变换处理，也不算是很高清，resize到520*520再中心crop到448*448
     transformations_test = transforms.Compose([transforms.Resize(520),transforms.CenterCrop(448),\
         transforms.ToTensor(), transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])])
   
@@ -61,6 +63,7 @@ def main(config):
         label = np.zeros([len(testset)])
         y_output = np.zeros([len(testset)])
         videos_name = []
+        # renyu: DataLoader返回的第一项是8帧Frames，第二项是从本地文件读取的预处理好的motion特征numpy数组，正好对应model的输入
         for i, (video, feature_3D, mos, video_name) in enumerate(test_loader):
             print(video_name[0])
             videos_name.append(video_name)

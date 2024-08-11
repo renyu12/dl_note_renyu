@@ -11,6 +11,8 @@ from PIL import Image
 
 from torchvision import transforms
 
+# renyu: 单视频文件推理的代码，整的挺好的是基本把所有推理所需的代码放在一个.py文件了（除了model目录下的UGC_BVQA_model.py），用起来很方便
+
 def video_processing_spatial(dist):
 
     video_name = dist

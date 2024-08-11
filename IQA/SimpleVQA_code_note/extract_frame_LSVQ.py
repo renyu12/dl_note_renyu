@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import cv2
 
+# renyu: 这里就是很简单的从每个mp4视频抽帧预处理存成8个.png文件，作为2D Frames，准备输入到后面的ResNet50提取Spatial特征
 def extract_frame(videos_dir, video_name, save_folder):
     filename = os.path.join(videos_dir, video_name + '.mp4')
     video_capture = cv2.VideoCapture()
