@@ -206,8 +206,25 @@ VQA任务的主观性很强，如果不同用户有不同的评判标准（尤�
 视频质量评估任务和视频理解任务相对而言是相似程度比较大的，都需要对视频空域时域的信息进行分析。而相比之下，视频理解任务是一个更加热门的研究领域，实际中很多VQA任务模型也会用到从视频列  
   
 # 论文整理  
+## IQA  
+### （19.12.20德州大学）From Patches to Pictures (PaQ-2-PiQ): Mapping the Perceptual Space of Picture Quality  
+做了一个较大的in-the-wild IQA数据集（应该是FLIVE），并且每张图像还带了3个不同大小patch（20% 30% 40%）的MOS，从而可以分析下局部和整体的质量关系，答案是比较相关（算是随机crop的理论基础了）  
+做了个模型就是ResNet-18改改，因为有了patch评分的信息，所以引入了ROIPool加权，把patch质量评估结果和全局质量评估结果一起考虑得到最后得分，会比光输入图片高一些  
+感觉这也不太算是数据增强的技术，patch也是做了主观评分实验的……  
 ## VQA  
 有很多早期的模型现在看来指标都比较差了，所以没有往前看很多，可能会漏掉一些有意义的idea，有机会再看吧。整体看近年的论文大都是在采样方法上做文章，还是有很多相通之处的。  
+### 综述  
+#### （24.2.5上交 超强综述）Perceptual Video Quality Assessment: A Survey  
+这篇综述覆盖的内容非常全面，整理了大量数据集和模型，尤其是除了通用VQA之外，还覆盖了很多新的VQA方向（特定应用），能有一些启发，可能针对一些特定的应用去设计有侧重点的模型，不一定一直卷通用VQA。例如视频压缩、流媒体、3D视频、VR视频、高帧率视频、音频+视频、HDR/WCG视频、游戏视频……  
+  
+对于做的比较多的通用NR VQA部分，做了分类，这里挺不好分类的，只能大致分下，我觉得也挺有思路  
+分为知识驱动（旧方法手动提一些特征）、和数据驱动（基于预训练模型和基于端到端训练、基于自监督学习）  
+其中专门点出了大量模型是直接基于预训练模型的，这一点也是挺重要的，即使不从头训练模型，很多预训练模型可以直接拿来用，然后最后训练回归器就可以，但似乎这并不是优于从头训练的方式，毕竟有LSVQ数据集可以从头训练可能干不过，但看做的一些比较新的文章指标还不错  
+自监督学习方法能够缓解主观评分数据不足的问题，应该是很有意义的，目前看论文有一些，要研究一下，看看和数据增强的关联  
+  
+### （18.7.31深大 TLVQM）Two-Level Approach for No-Reference Consumer Video Quality Assessment  
+我觉得算是传统人工特征的一个集大成模型了，用了75个传统特征，什么对比度、运动矢量都上了，最后KoNViD-1k上跑出SROCC 0.78，是不错的成绩了，但也基本说明做到这种程度也依然被深度学习方法吊打。  
+  
 ### （19.10.5北大 VSFA）  
 问题：VQA有时间滞后效应，人会记住历史的低质量帧然后降低对后续帧的评分，需要考虑长期依赖关系  
 方法：先使用CNN提取每一帧的内容特征，每一帧的特征按时间顺序输入到GRU中，使用GRU来解决对历史帧记忆的问题。最终的评分还经过了各个时刻GRU输出结果做池化  
@@ -238,6 +255,9 @@ SimpleVQA的前身，大体思路是相似的。
 用了两个看起来结构很复杂的网络，跑了KoNViD和Youtube UGC指标挺不错的。TODO  
 先是PHIQNet，是一种考虑了多尺度的CNN，提取出考虑多尺度的特征。  
 然后是Long short-term convolutional transformer，长短期卷积Transfomer？  
+  
+### （22.5.7福州大学 STFEE）Deep quality assessment of compressed videos A subjective and objective study  
+这里预处理阶段就做了显著性检测，是一种加ROI的方法，然后送入I3D提取特征，最后transformer回归  
   
 ### （22.6.6 NTU）FAST-VQA: Efficient End-to-end Video Quality Assessment with Fragment Sampling  
 问题：主要解决了VQA中高清视频数据量过大，计算开销高的问题  
@@ -290,8 +310,13 @@ TODO：网络设计需要再看下，技术分还是用了Fast-VQA，其他语�
 ### （23.7快手 VQT） Capturing Co-existing Distortions in  User-Generated Content for No-reference Video  Quality Assessment  
 TODO  
   
+### （23.8.1清华）Ada-dqa Adaptive diverse quality-aware feature acquisition for video quality assessment  
+应该是预训练模型使用的集大成之作  
+拼了7个经典预训练模型，最后回归，还做了蒸馏到一个Video Swin Transformer模型，分数很不错  
+  
 ### （23.12.28 NTU）Q-ALIGN: Teaching LMMs for Visual Scoring via Discrete Text-Defined Levels  
 使用多模态大模型，输入是图像和文字问题（评分如何？），输出是5个主观评分级别。训练后可以实现利用大模型来做主观评分，并且同时支持图像质量、图像美学、视频质量的评分。  
+  
 ### （24.2.20快手 KSVQE）KVQ:KwaiVideo Quality Assessment for Short-form Videos  
 应该是目前的SOTA，在FastVQA网格采样的基础上，又加了两个旁路网络，一个是获得不同分块的权重（似乎还有内容识别），一个是检查一些形变失真（这个听起来没啥意思）。  
 TODO：这个要认真分析下。  
@@ -309,4 +334,4 @@ CVPR 2024
 第一名是上交SimpleVQA作者和NTU FastVQA作者的联队，这有点欺负人了，直接把SimpleVQA和FastVQA的结果组合了，还附加了Q-Align和LIQE两个模型的结果一起，4个拼在一块很强。  
 但是整体看下来没有什么新的东西，毕竟是刷分的比赛，基本都是流行的这几个主流模型去一通合并，不过也可以看出来FastVQA（含Dover）、SimpleVQA、Q-Align等几个模型是经过检验的模型。  
 ### （24.5快手 PTM-VQA） PTM-VQA: Efficient Video Quality Assessment Leverage Diverse PreTrained Models from the Wild  
-TODO
+TODO  

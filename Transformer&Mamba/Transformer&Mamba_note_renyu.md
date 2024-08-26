@@ -50,11 +50,79 @@ BERT是基于Transformer预训练+微调的模型，也就是不关新具体任�
 谷歌官方是T2T团队开源的代码 https://github.com/tensorflow/tensor2tensor  
 有博主说代码比较难读，后面其他人的实现也不少，建议看哈佛NLP团队写的pytorch注释版本https://github.com/harvardnlp/annotated-transformer  
   
-### 《An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale》  
-2020年将Transformer用在CV任务的ViT，Google团队做的。不算最早，但是实现了最简单的方式取得很好的效果。成为了奠基论文。  
+## Transformer in CV  
+这里不太关心具体的理论基础了，我就不从论文出发整理了，重点找一些带好的开源代码的模型，从模型出发整理  
+找合适模型代码的方法和找论文不一样，论文好不一定代码好使，但是大家用的多的代码一定是好使的  
+上Hugging Face查热门模型  
+上Github查高star项目  
+看魔改模型项目常用的baseline、Backbone  
+#### 图像-Pytorch Timm库  
+https://github.com/huggingface/pytorch-image-models  
+Ross Wightman大神创建，集成了大量CV任务的模型  
+  
+#### 视频-SlowFast、PyTorchVideo库  
+https://github.com/facebookresearch/SlowFast  
+https://github.com/facebookresearch/pytorchvideo  
+Facebook整的库，集成了一些经典的Video模型，主要是C2D、I3D、SlowFast、CSN、X3D等，有Facebook搞的MViT（Multiscale Vision Transformers）  
+  
+#### 图像-（20谷歌ViT CV任务Transformer奠基）《An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale》  
+https://github.com/google-research/vision_transformer  
+2020年将Transformer用在CV任务的ViT，Google团队做的。不算最早，但是实现了最简单的方式取得很好的效果，并且实验做的非常完善。成为了奠基论文。（之前尝试Transformer用于CV任务效果不好，其实有数据量不足的问题）  
 最重要的一点就是输入的patch embedding。将224x224的输入图像，分为16x16的小patch，一张图片对应的序列长度就是(224x224)/(16x16)=196，一个patch Embedding之前的维度是16x16x3通道=768维。  
 然后一个patch经过线性投影层就得到一个token/Embedding，这里我一开始不理解啥是线性投影层，其实看下代码实现就是不加ReLU激活函数的2D卷积，然后卷积核大小同Patch 16x16x3，步长也同Patch 16x16，这样就实现了一个Patch-卷积核对应位置点乘累加得到一个值，那想要任意长度的Embedding，只需要调整卷积核数量即可。原始的ViT中就是用了768个卷积核保持维数不变。  
 既然用了卷积（线性投影）层，这里就有可以学习的weight和bias。所以和NLP任务中使用固定的预训练模型/word2vec等工具做Embedding不同，这也是由于CV任务中图像输入比文本输入更复杂，没法用固定的Embedding方式就得到准确的Representation，所以ViT中的Embedding层也是一起训练调参的。  
+  
+#### 图像-（21Facebook DeiT）Data-Efficient Image Transformers  
+https://github.com/facebookresearch/deit  
+高质量的Video Transformer代码  
+DeiT主要做的事情就是原版ViT要的数据量很大，在小数据集上效果不好，所以引入了模型蒸馏和数据增强，能取得更好的效果  
+  
+#### 图像-（21微软 Swin Transformer）Swin Transformer: Hierarchical Vision Transformer using Shifted Windows  
+https://github.com/microsoft/Swin-Transformer  
+经典的Swin Transformer，是微软的官方实现，代码质量高  
+  
+#### 视频-（21Facebook TimeSFormer）Is Space-Time Attention All You Need for Video Understanding?  
+https://github.com/facebookresearch/TimeSformer  
+比ViViT还早一点点的一个视频Transformer实现，也是尝试了不同的方式来处理时间维度  
+对比了  
+1.仅空间  
+2.普通时间空间一起，计算量很大  
+3.先时间后空间（认为的最好方式）  
+4.先局部后全局？  
+5.轴方向切分，先时间后分别宽和高？  
+没有细研究，看指标也不错，但好像相比ViViT比较少提，区别乍一看就是先做了时域的注意力？  
+  
+#### 视频-（21谷歌）ViViT: A Video Vision Transformer  
+https://huggingface.co/docs/transformers/en/model_doc/vivit  
+https://github.com/google-research/scenic/tree/main/scenic/projects/vivit  
+代码说是基于谷歌自己推的JAX开发的，不是pytorch，好像比较少使用？  
+2021年将Transformer扩展到视频任务的ViT，奠基论文  
+讨论了输入2D图像加入时间维度成3D视频后应该如何使用Transformer处理  
+使用Tubelet Embedding（就是3D小长方体作为一个patch），并讨论了4种对3D视频输入的注意力机制model看怎么提取时空特征比较好，分别是  
+1.时间空间不分开处理直接原始token输入，简单但计算量大（我理解是不是普遍还是这样的简单方式，直接送进去）  
+2.完全先空间再时间，相当于过两个Encoder，帧内提空间token过空间Encoder，然后得到的token再合在一起过时间Encoder  
+3.局部先空间再时间，修改了Transformer Block的结构，每一个Block中先算空间注意力再算时间注意力  
+4.局部分开空间时间，修改了Transformer Block的结构  
+  
+#### 视频-（21亚马逊 VidTr）VidTr: Video Transformer Without Convolutions  
+https://github.com/amazon-science/gluonmm/tree/main/src/transformers/models/vidtr  
+也是早期的一个Video Transformer模型，但是做的可能没那么好，只是部分文章里会提到，大部分会忽略这个  
+  
+#### 视频-（21 Video Swin Transformer）Video Swin Transformer  
+https://github.com/SwinTransformer/Video-Swin-Transformer  
+代码是基于mmaction2开发的，确实是很好的库，但依赖项会有点多  
+FastVQA中用的SwinTransformer3D似乎不是这个  
+  
+#### 视频-（22南京大学 VideoMAE）VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training  
+https://github.com/MCG-NJU/VideoMAE  
+这个事情做的很牛，在视频模型上跑无监督学习  
+原理也是类似NLP的无监督学习，对视频数据进行部分掩码，然后训练模型恢复掩码部分，效果非常好，是Video Transformer的突破性论文，但是在跑训练过程中也需要很大的算力  
+后面23年还出了第二版  
+类似的视频MAE也有一些其他研究，例如  
+（22Facebook ST-MAE）  
+Masked Autoencoders As Spatiotemporal Learners  
+（23复旦 MVD）Masked video distillation: Rethinking masked feature modeling for self-supervised video representation learning  
+后面可以了解下  
   
 # Mamba  
 ## 简介  
@@ -177,9 +245,19 @@ README.md说直接pip install mamba-ssm即可，我不是很成功，卡在build
     conda create --name mamba1 python=3.10  
     conda init bash && source /root/.bashrc  
     conda activate mamba1  
-    conda install pytorch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 pytorch-cuda=11.8 -c pytorch -c nvidia  
+    conda install pytorch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 pytorch-cuda==11.8 -c pytorch -c nvidia  
     pip install packaging  
-pytorch安装那一步还是会比较慢看网速，会装很多包，PyTorch 1G+，估计十多分钟的样子。这样基本环境就有了，然后在源码目录下  
+pytorch安装那一步还是会比较慢看网速，会装很多包，PyTorch 1G+，估计十多分钟的样子。  
+* cuda安装版本问题  
+其中pytorch-cuda是仅适用于pytorch的cuda库，说是conda上可能只有一个单独的库，实际不会把nvcc等cuda基础库安装了。如果有问题，需要完整安装各种平台都适用的cuda库应该是装cudatoolkit==11.8。但是这里遇到过一些包装下来还是有问题装了最新版……可能是源的问题，官网说安装命令用conda install nvidia/label/cuda-11.8.0::cuda-toolkit，但是安装了之后其中几个包包括cuda-nvcc还是最新版，有毒……继续conda install nvidia/label/cuda-11.8.0::cuda-nvcc（以及cuda-cuobjdump cuda-cuxxfilt cuda-compiler cuda-nvpurne几个包，都是手动解决的……应该可以直接conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit解决）  
+有一次还遇到比较坑的事情，就是nvidia库里不知道为啥还装了个cuda-version的包获取版本信息，结果获取的是12.5……这种情况要再单独安装cuda-version=11.8  
+* numpy兼容问题  
+还遇到的情况是pytorch旧版不兼容numpy2，回退numpy版本，例如装numpy==1.24.3  
+* 编译器版本问题  
+编译casual_conv1d说gcc 11之后的版本不支持……conda install gcc=10  
+  
+  
+这样基本环境就有了，然后在源码目录下  
   
     python setup.py install  
 就可以安装，但这里有个小坑是装依赖项的时候还是拉的官方源，国内机器非常慢会断连接中断安装……一开始一个一个手动pip，后面发现可以搞个setup.cfg配置文件写上  

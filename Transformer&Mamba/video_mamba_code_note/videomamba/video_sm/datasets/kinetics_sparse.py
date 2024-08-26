@@ -168,6 +168,7 @@ class VideoClsDataset_sparse(Dataset):
             buffer = self.data_resize(buffer)
             if isinstance(buffer, list):
                 buffer = np.stack(buffer, 0)
+            # renyu: 配置test_num_crop对应测试集的空域采样数，split_nb值等于test_num_crop，为1的时候中心裁剪，大于1的时候找长边按步长裁剪
             if self.test_num_crop == 1:
                 spatial_step = 1.0 * (max(buffer.shape[1], buffer.shape[2]) - self.short_side_size) / 2
                 spatial_start = int(spatial_step)
