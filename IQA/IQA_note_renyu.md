@@ -64,15 +64,21 @@ Structural Similarity Index 结构相似性
   
 ## 关于数据集  
 ### IQA数据集  
-比较经典的4个常用的IQA数据集列在表里  
+比较经典的4个常用的有参考IQA数据集列在表里  
 | 数据集 | 参考图像数 | 失真图像数 | 失真类型数 | 测试人员数 |  
 | --- | --- | --- | --- | --- |  
 | TID 2013 | 25 | 3000 | 24 | 971 |  
 | TID 2008 | 25 | 1700 | 17 | 838 |  
 | CSIQ | 30 | 866 | 6 | 35 |  
 | LIVE | 29 | 779 | 5 | 161 |  
+无参数据集有  
+* LIVE-Challenge  
+2016年的一个in the wild数据集，1162张照片，8100人标注，35万份评分，MOS分数[3.42, 92.43]  
+* KonIQ-10K  
+2020年的一个in the wild数据集，10073张照片，1459人标注，120万份评分，MOS分数[3.91, 88.39]  
+  
 还有一些时间久的IVC、Toyama、A57、WIQ数据量比较小了  
-TODO: 也有一些新的可能还没有完全普及作为通用标准，需要研究下，例如KonIQ-10K, PieAPP, PIPAL, FLIVE, SPAQ, KADID-10k  
+TODO: 也有一些新的可能还没有完全普及作为通用标准，需要研究下，例如PieAPP, PIPAL, FLIVE, SPAQ, KADID-10k  
 #### TID 2013  
 这个是目前最常用最权威的数据集。都是512\*384的BMP文件。3000张=25张图片\*24种失真类型\*5个失真等级  
 TODO: 具体格式  
@@ -205,6 +211,59 @@ VQA任务的主观性很强，如果不同用户有不同的评判标准（尤�
 ### 和视频理解任务关联  
 视频质量评估任务和视频理解任务相对而言是相似程度比较大的，都需要对视频空域时域的信息进行分析。而相比之下，视频理解任务是一个更加热门的研究领域，实际中很多VQA任务模型也会用到从视频列  
   
+# 代码  
+## IQA  
+### IQA-PyTorch  
+非常牛的一个IQA任务开源库，NTU Chaofeng Chen大神做的，搭好了一个通用框架，基本集成了主流的各个IQA模型和数据集，统一了训练、测试方法  
+#### 代码使用  
+1. 安装  
+应该还是比较好装的，感觉不一定要安装，装了可以用命令行工具pyiqa方便一些启动固定的IQA任务，并且随处import pyiqa，不过直接跑也可以  
+```  
+git clone https://github.com/chaofengc/IQA-PyTorch.git  
+cd IQA-PyTorch  
+pip install -r requirements.txt  
+python setup.py develop  
+```  
+2. 准备数据集  
+常用IQA数据集都上传到Hugging Face了，真是一件大好事  
+https://huggingface.co/datasets/chaofengc/IQA-Toolbox-Datasets  
+使用的时候下载数据集对应压缩包，推荐在代码目录创建datasets目录，然后解压到这里，可以匹配配置  
+除了数据集本身，所有数据集的标签文件和数据集划分设置，都打包到了一个meta_info.tgz文件，这个也要一起下载了解压到datasets目录  
+除此之外还可以关注下DataLoader的实现，基类定义在  
+pyiqa/data/base_iqa_dataset.py中，派生出通用的NR数据集DataLoader定义在pyiqa/data/general_nr_dataset.py中，然后一些数据集还需要有特殊的处理的要再自己派生实现DataLoader类  
+3. 快速跑推理  
+-m指定模型，-i指定输入图像  
+```  
+python inference_iqa.py -m brisque -i ./ResultsCalibra/dist_dir/I03.bmp  
+```  
+4. 跑训练  
+训练的参数配置都是yaml配置文件中写好的，不同模型和数据集的配置还可能有一些细微区别，反正解析配置的代码也是可以派生类里自己处理的  
+```  
+# 普通数据集训练使用train.py  
+python pyiqa/train.py -opt options/train/DBCNN/train_DBCNN.yml  
+  
+# 需要n-fold交叉验证训练的用train_nsplits.py，只是在train.py的基础上加了个循环不同数据集划分的操作  
+python pyiqa/train_nsplits.py -opt options/train/DBCNN/train_DBCNN.yml  
+```  
+#### 新增模型  
+这里代码做的挺牛逼的，要兼容不同的数据集以及不同模型结构，又要尽可能复用代码和配置项避免做成不同模型和数据集的代码集合，就是要写好的基类留好接口可能定制化扩展  
+重点看好从网络结构、model、训练配置中各个部分已经有的功能，然后根据待新增模型的输入输出、预处理、训练方法等等方便去自定义开发  
+##### 网络结构arch  
+网络结构定义在pyiqa/archs目录下，可以任意新增网络结构，需要  
+```  
+from pyiqa.utils.registry import ARCH_REGISTRY  
+```  
+引入注册方法，然后把新增的网络结构类注册  
+设计到预训练模型加载，有通用的配置项pretrained_model_path，如果要加载预训练模型的话，可以在init函数中判断配置自己进行处理  
+##### 新增model  
+model定义在pyiqa/models目录下，其实已经有比较好的一个基类GeneralIQAModel，基本把训练、测试时各种参数初始化、LOSS设置、模型输出都封装好了  
+如果确实有一些特别的训练流程处理就单独写派生类修改，例如DBCNN增加了一个学习率降低但整个网络不冻结的微调阶段、WaDIQaM模型两部分用不同的优化器等等  
+##### 新增训练配置option  
+训练配置在options/train目录下，（test目录下还有超分模型配置，作者似乎想把超分的也整合了，看了下实际没有做），配置项支持的还是比较全面的  
+分了基础配置、数据集配置、网络结构配置、训练配置等，具体配置的实现要结合代码去分析，有一些配置项并不是通用的，如果需要自定义一些配置也很好处理  
+新建模型的时候综合相似的各个模型配置参考，做适合自己模型的配置  
+  
+  
 # 论文整理  
 ## IQA  
 ### （19.12.20德州大学）From Patches to Pictures (PaQ-2-PiQ): Mapping the Perceptual Space of Picture Quality  
@@ -215,7 +274,8 @@ VQA任务的主观性很强，如果不同用户有不同的评判标准（尤�
 有很多早期的模型现在看来指标都比较差了，所以没有往前看很多，可能会漏掉一些有意义的idea，有机会再看吧。整体看近年的论文大都是在采样方法上做文章，还是有很多相通之处的。  
 ### 综述  
 #### （24.2.5上交 超强综述）Perceptual Video Quality Assessment: A Survey  
-这篇综述覆盖的内容非常全面，整理了大量数据集和模型，尤其是除了通用VQA之外，还覆盖了很多新的VQA方向（特定应用），能有一些启发，可能针对一些特定的应用去设计有侧重点的模型，不一定一直卷通用VQA。例如视频压缩、流媒体、3D视频、VR视频、高帧率视频、音频+视频、HDR/WCG视频、游戏视频……  
+这篇综述覆盖的内容非常全面，主观评分方法+数据集+通用VQA方法+特定应用VQA方法+指标+展望  
+整理了大量数据集和模型，尤其是除了通用VQA之外，还覆盖了很多新的VQA方向（特定应用），能有一些启发，可能针对一些特定的应用去设计有侧重点的模型，不一定一直卷通用VQA。例如视频压缩、流媒体、3D视频、VR视频、高帧率视频、音频+视频、HDR/WCG视频、游戏视频……  
   
 对于做的比较多的通用NR VQA部分，做了分类，这里挺不好分类的，只能大致分下，我觉得也挺有思路  
 分为知识驱动（旧方法手动提一些特征）、和数据驱动（基于预训练模型和基于端到端训练、基于自监督学习）  
@@ -297,6 +357,9 @@ backbone用的是4层注意力层的Swin-T网络，但还要做一点调整。�
 * 提出了DOVER视频质量评估模型  
 就是分了两路分别计算技术评分和审美评分  
 TODO：DOVER具体网络设计，我理解技术分应该还是类似Fast-VQA的处理，审美分主要依赖全局语义可以做下采样，但是提了个Cross-scale Regularization没看懂是什么，不同尺度下采样之间比较吗？  
+  
+### （23.1.3谷歌）MRET Multi-resolution transformer for video quality assessment  
+TODO  
   
 ### （23.4 NTIRE VQA竞赛）NTIRE 2023 QA of Video Enhancement Challenge  
 淘宝团队基于SimpleVQA的模型拿了冠军，在数据增强上做了比较多。TODO：需要借鉴下  
