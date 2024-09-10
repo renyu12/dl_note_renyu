@@ -305,7 +305,8 @@ class VideoDataset_images_VQA_dataset_with_motion_features(data.Dataset):
        
         return transformed_video, transformed_feature, video_score, video_name
 
-
+# renyu: 这里是低清路径，读原始视频输入SlowFast网络提取特征的DataLoader
+#        extract_SlowFast_freature_LSVQ.py中初始化时传入要做的transform（包括resize、正则化）
 class VideoDataset_NR_LSVQ_SlowFast_feature(data.Dataset):
     """Read data from the original dataset for feature extraction"""
     def __init__(self, data_dir, filename_path, transform, resize, is_test_1080p = False):
@@ -364,6 +365,7 @@ class VideoDataset_NR_LSVQ_SlowFast_feature(data.Dataset):
         video_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         video_frame_rate = int(round(cap.get(cv2.CAP_PROP_FPS)))
 
+        # renyu: 这里是拿总帧数/帧率=估计秒数作为clip的数量，一秒一段
         video_clip = int(video_length/video_frame_rate)
        
         video_clip_min = 8
@@ -375,6 +377,7 @@ class VideoDataset_NR_LSVQ_SlowFast_feature(data.Dataset):
         transformed_video_all = []
         
         video_read_index = 0
+        # renyu: 遍历当前视频所有帧做transform
         for i in range(video_length):
             has_frames, frame = video_capture.read()
             if has_frames:
@@ -383,13 +386,15 @@ class VideoDataset_NR_LSVQ_SlowFast_feature(data.Dataset):
                 transformed_frame_all[video_read_index] = read_frame
                 video_read_index += 1
 
-
+        # renyu: 如果有一些问题帧，导致实际读取的帧少于预计帧数，那就复制最后一帧保持帧数
         if video_read_index < video_length:
             for i in range(video_read_index, video_length):
                 transformed_frame_all[i] = transformed_frame_all[video_read_index - 1]
  
         video_capture.release()
 
+        # renyu: 为了统一不同视频输入SlowFast的格式都是一段clip 32帧，做法是按计算出的clip起始点（1秒1个）开始取32帧
+        #        问题是最后的clip可能不够32帧，做法是能用的就用，不够的复制最后一帧填充到32帧
         for i in range(video_clip):
             transformed_video = torch.zeros([video_length_clip, video_channel, self.resize, self.resize])
             if (i*video_frame_rate + video_length_clip) <= video_length:
@@ -400,6 +405,7 @@ class VideoDataset_NR_LSVQ_SlowFast_feature(data.Dataset):
                     transformed_video[j] = transformed_video[video_length - i*video_frame_rate - 1]
             transformed_video_all.append(transformed_video)
 
+        # renyu: 最少需要8段视频clip，不够的话也是复制最后一个clip凑齐8个
         if video_clip < video_clip_min:
             for i in range(video_clip, video_clip_min):
                 transformed_video_all.append(transformed_video_all[video_clip - 1])

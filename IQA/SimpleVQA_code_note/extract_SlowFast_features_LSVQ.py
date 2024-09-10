@@ -12,7 +12,7 @@ from torchvision import transforms
 from pytorchvideo.models.hub import slowfast_r50
 import torch.nn as nn
 
-
+# renyu： 为了分开输入slow路径和fast路径，先抽1/4的帧放到前面x[0]给slow路径，后面全量帧x[1]给fast路径
 def pack_pathway_output(frames, device):
     """
     Prepare output as a list of tensors. Each tensor corresponding to a
@@ -131,6 +131,7 @@ def main(config):
             if not os.path.exists(config.feature_save_folder + video_name):
                 os.makedirs(config.feature_save_folder + video_name)
             
+            # renyu: TODO: 这里的Motion特征shape需要分析下
             for idx, ele in enumerate(video):
                 # ele = ele.to(device)
                 ele = ele.permute(0, 2, 1, 3, 4)

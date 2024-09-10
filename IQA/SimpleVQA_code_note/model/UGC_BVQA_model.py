@@ -124,8 +124,9 @@ class Bottleneck(nn.Module):
         return out
 
 
-# renyu: 注意这里不是原版的ResNet了，这个命名不太好，容易引发误会，可读性不好……
-#        其实是一边接收2D Frames特征输入，过一个ResNet50得到Spatial特征，然后和另一边接收到的3D motion特征连一起，过一个MLP做regression得到多帧结果
+# renyu: 注意这里不是原版的ResNet了，这个命名不太好，容易引发误会，可读性不好……（是基于原版ResNet的代码改了一下）
+#        其实是一边接收2D Frames特征输入，过一个ResNet50得到Spatial特征，这里还分了
+#        然后和另一边接收到的3D motion特征连一起，过一个MLP做regression得到多帧结果
 #        最后多帧输出平均池化一下得到最终评分
 class ResNet(nn.Module):
 
@@ -246,6 +247,7 @@ class ResNet(nn.Module):
         x = self.layer4(x)
         x_avg4 = self.avgpool(x)
         x_std4 = global_std_pool2d(x)
+        # renyu: 专门算了第2、3、4层的输出然后做了global std池化最后连起来，还挺长的
         x = torch.cat((x_avg2, x_std2, x_avg3, x_std3, x_avg4, x_std4), dim = 1)
         # x: batch * frames x (2048*2 + 1024*2 + 512*2)
         x = torch.flatten(x, 1)

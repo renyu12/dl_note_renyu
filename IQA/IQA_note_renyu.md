@@ -130,6 +130,14 @@ Waterloo Point Cloud，滑铁卢大学发的一个比较大的彩色点云质量
 一般是缩小的resize，这也是一种下采样，涉及到不同算法如最近邻、双线性、Area、Lanczos等等  
 * 网格采样拼接  
 FastVQA的Grid Mini-patch Sampling（GMS）方法，分网格后在网格内部随机采样然后再拼接成一块  
+##### 整理一点IQA模型的处理  
+23 TOPIQ 384x384输入，所以大图resize到448/384，小图就直接随机crop  
+23 HyperIQA 一张图像取3+15？多个子图像输入  
+22 MANIQA 224x224输入，一张图随机crop 20次取平均  
+21 UNIQUE 384x384输入，大图resize到512x512，然后随机crop  
+20 KonIQ 适配数据集的512x384输入，做了resize 224x224版本性能不好  
+19 DBCNN 最后有全局池化，支持任意输入，但还是resize到448/384  
+17 NIMA-inceptionv2 resize到256，再随机crop 224  
 #### 时域  
 * 随机采样  
 * 均匀采样  
@@ -266,10 +274,86 @@ model定义在pyiqa/models目录下，其实已经有比较好的一个基类Gen
   
 # 论文整理  
 ## IQA  
+### （17.1.13德国Fraunhofer研究所 DeepIQA/WaDIQaM）Deep Neural Networks for No-Reference and Full-Reference Image Quality Assessment  
+非常经典的早期DL IQA模型，结构是很工整的，分开做了FR和NR的，单独看NR的吧  
+特征提取部分就是（2层CNN+1层2x2最大池化）x5，图像拆分为32x32的小补丁输入，所以经过卷积之后正好size为1，通道升到512维。  
+回归Head是分了预测和权重两路，每个小补丁预测分数，并预测补丁权重，最后加权平均获得整个图像的分数。  
+跑分在FR数据集上还可以，但是在NR数据集上比较差了。  
+不限制输入大小，训练的时候是每张图像随机crop 32个32x32的小补丁，测试的时候是整张图像不重叠的切补丁输入。  
+  
+### （19.7.5武大DBCNN）Blind Image Quality Assessment Using A Deep Bilinear CNN  
+效果很不错的CNN模型  
+网络结构分了两路，一路是只保留Backbone的S-CNN合成失真分类任务预训练模型，一路是只保留Backbone的VGG-16 ImageNet分类预训练模型，相当于合并了两个预训练CV模型。  
+两路的合并方式是bilinear pooling，得到512x128的特征图。  
+回归Head就是一层线性回归层，512x128->1  
+S-CNN和VGG-16本身应该都是限制224x224的，但是合在一起做了池化应该是不限制输入大小的，所以实际训练的时候就是随机crop到448/384，验证好像就是原图  
+  
 ### （19.12.20德州大学）From Patches to Pictures (PaQ-2-PiQ): Mapping the Perceptual Space of Picture Quality  
 做了一个较大的in-the-wild IQA数据集（应该是FLIVE），并且每张图像还带了3个不同大小patch（20% 30% 40%）的MOS，从而可以分析下局部和整体的质量关系，答案是比较相关（算是随机crop的理论基础了）  
 做了个模型就是ResNet-18改改，因为有了patch评分的信息，所以引入了ROIPool加权，把patch质量评估结果和全局质量评估结果一起考虑得到最后得分，会比光输入图片高一些  
 感觉这也不太算是数据增强的技术，patch也是做了主观评分实验的……  
+  
+### （20.3.7西工大 HyperIQA）Blindly Assess Image Quality in the Wild Guided by a Self-Adaptive Hyper Network  
+TODO：思路没太看明白，大致是把ResNet的高层语义特征和底层纹理特征分开处理了  
+ResNet之后高层语义特征分了一路输入啥内容理解网络，分层特征输入MLP。然后内容理解网络的分层输出又输入MLP，反正最后出的结果抽象理解下就是综合了高层和底层的特征，把CNN用的比较充分了  
+输入是一张图像随机crop 25张224x224然后结果取平均  
+  
+### （20.4.11西安电子科大）MetaIQA Deep Meta-learning for No-Reference Image Quality Assessment  
+好像是在合成数据集上训练然后去跑真实失真数据集，普通CNN模型  
+合成失真数据集上还可以，但是真实失真数据集上指标挺差，感觉参考价值有限  
+  
+### （20.12.30挪威研究中心 TIQAorTRIQ）Transformer for Image Quality Assessment  
+应该就是比较早的Transformer用法  
+ResetNet提取出的特征图输入ViT  
+回归Head两层MLP  
+没做resize和crop，说没限制输入size，把token限制尽量搞大了  
+  
+### （21.2.23上交 UNIQUE）Uncertainty-Aware Blind Image Quality Assessment  
+TODO：这里原理没太看明白，设计了一个稍有点复杂的训练方法，可以把多个IQA数据集放在一起训练  
+网络就是基于Resnet-34  
+回归头是一个512x512->2的线性回归层  
+训练阶段输入resize到一边512，然后随机crop到384  
+  
+### （21.8.12谷歌）MUSIQ Multi-scale Image Quality Transformer  
+指出了CNN-based模型存在输入图像size限制问题，说明了一般的解决方法：  
+* resize&crop -> 引入失真  
+* 多crop集合 -> 增加计算成本  
+* 池化到固定形状  
+* 提取固定大小特征  
+  
+虽然是文章中提出要解决的问题，但其实上面的方法还挺值得借鉴的。Transformer按说也是ViT那样固定224的输入，但是有办法做一些拓展。  
+网络直接用的Transformer，但是在Embedding部分做了很多文章，可以支持任意宽高比的全尺寸图像直接输入  
+Embedding部分引入了三个组件，一是多尺度Patch Embedding；二是基于哈希的二维空间Embedding；三是可学习的scale Embedding。TODO: 细节可以研究下，最后的效果是输入的图像补丁还加入了多尺度的信息  
+回归头就是一个线性回归层  
+任意原始尺寸图像输入，有一种优化是resize到384和224加两路输入，有一点提升但是基本可以忽略  
+  
+### （21.8.16CMU TReS）No-reference image quality assessment via transformers, relative ranking, and self-consistency  
+https://github.com/isalirezag/TReS  
+CNN+Transformer用的比较好的  
+ResNet50分4层特征图，池化统一大小之后连在一起输入Transformer  
+回归Head  
+输入是一张图像随机crop 50张224x224然后结果取平均，有点夸张  
+  
+### （22.4.29清华）MANIQA Multi-dimension Attention Network for No-Reference Image Quality Assessment  
+非常经典的Transformer IQA模型，指标爆杀之前所有模型，把注意力机制用的很好，值得学习  
+网络结构是直接ViT，输出结果又拼成图像之后过了卷积和Swin Transformer组成的Block，最后过一个两路的双层MLP，分别获得patch的分数和权重，最后加权求和得到整个图像的评分  
+输入是训练阶段一张图像随机crop一张224x224（反正多轮训练），测试阶段一张图像随机crop 20张224x224然后结果取平均  
+  
+### （23.3上交BIQA模型LIQE）Blind Image Quality Assessment via Vision-Language Correspondence A Multitask Learning Perspective  
+把多模态大模型CLIP用于IQA任务，效果还可以，但是看指标还是弱于MANQIA的  
+在IQA任务中文本-图像对中的文本内容包含了场景、失真、质量评分信息，例如“xx场景图像，有xx失真，质量xx”。  
+训练时做了多任务训练，就是同一个模型，可以跑场景分类任务、失真分类任务、IQA任务三种，合起来算一个Loss去训练  
+文本encoder用的是GPT-2，图像encoder用的是ViT-B/32  
+好像这里没有啥回归头，文本分支出的Embedding和图像分支出的Embedding得到余弦相似度就直接作为输出了，使用不同的的view、sum和argmax操作得到三个任务各自的预测结果，还挺神奇的  
+图像等间隔crop 15张224x224然后结果取平均  
+  
+### （23.8.6NTU）TOPIQ A Top-down Approach from Semantics to  Distortions for Image Quality Assessment  
+TODO：模型稍有点复杂没太研究明白  
+核心的一个思路是考虑高层特征中包含的语义信息，然后用高层特征指导自顶向下指导底层特征，特征连线有点复杂，主要的改动都是在一些特征融合模块上，引入了gated local pooling block（GLP），self-attention block（SA），cross-scale attention block（CSA）三种模块  
+分了FR和NR两种模式，FR就要多融合一些参考图像的信息，看跑分还是相当高的  
+回归Head是一个三层的MLP，感觉不算很重要了，前面还有注意力模块，整体已经很复杂了  
+输入应该是任意size的，毕竟有GLP池化统一特征图大小，不过训练的时候针对不同数据集还是做了随机crop到384或者224，原图很大也会resize到448/384-416  
+  
 ## VQA  
 有很多早期的模型现在看来指标都比较差了，所以没有往前看很多，可能会漏掉一些有意义的idea，有机会再看吧。整体看近年的论文大都是在采样方法上做文章，还是有很多相通之处的。  
 ### 综述  
@@ -398,3 +482,5 @@ CVPR 2024
 但是整体看下来没有什么新的东西，毕竟是刷分的比赛，基本都是流行的这几个主流模型去一通合并，不过也可以看出来FastVQA（含Dover）、SimpleVQA、Q-Align等几个模型是经过检验的模型。  
 ### （24.5快手 PTM-VQA） PTM-VQA: Efficient Video Quality Assessment Leverage Diverse PreTrained Models from the Wild  
 TODO  
+  
+  
