@@ -130,14 +130,17 @@ Waterloo Point Cloud，滑铁卢大学发的一个比较大的彩色点云质量
 一般是缩小的resize，这也是一种下采样，涉及到不同算法如最近邻、双线性、Area、Lanczos等等  
 * 网格采样拼接  
 FastVQA的Grid Mini-patch Sampling（GMS）方法，分网格后在网格内部随机采样然后再拼接成一块  
-##### 整理一点IQA模型的处理  
+##### 整理一点IQA模型的经典处理  
 23 TOPIQ 384x384输入，所以大图resize到448/384，小图就直接随机crop  
 23 HyperIQA 一张图像取3+15？多个子图像输入  
 22 MANIQA 224x224输入，一张图随机crop 20次取平均  
 21 UNIQUE 384x384输入，大图resize到512x512，然后随机crop  
+21 TReS 随机crop50x224x224输入  
 20 KonIQ 适配数据集的512x384输入，做了resize 224x224版本性能不好  
 19 DBCNN 最后有全局池化，支持任意输入，但还是resize到448/384  
 17 NIMA-inceptionv2 resize到256，再随机crop 224  
+重复crop验证 HyperIQA TReS MANIQA LIQE  
+分层特征连接  
 #### 时域  
 * 随机采样  
 * 均匀采样  
@@ -173,9 +176,12 @@ FastVQA的Grid Mini-patch Sampling（GMS）方法，分网格后在网格内部�
 * 频域信息  
 * 直方图  
 ## 模型魔改  
+### CNN分层特征  
+### 注意力机制Block  
 ### 新模型  
 #### Mamba  
 #### RMKV  
+#### 仿HVS模型  
 ### 多模型融合  
 #### 集成学习  
 多种各有优势的网络模型合在一起，利用各自模型的优势场景分开处理不同的输入，获得的结果可以再通过简单的投票选一个/加权平均、复杂的MLP网络等方法，得到最终结果  
@@ -185,6 +191,7 @@ FastVQA的Grid Mini-patch Sampling（GMS）方法，分网格后在网格内部�
 动态选择模型，训练会比较难做  
 ### 压缩模型  
 #### 知识蒸馏  
+小模型直接学习大模型的预测结果，实现更低的开销获得类似的性能  
 #### 量化  
 混合精度训练AMP，已经做了。据说CV任务中bf16可以了，再小会有问题  
 后量化  
@@ -196,6 +203,10 @@ CNN好做一些，看权重低的连接、filter、通道就直接移除了。Tr
 主观评分很难搞，找人评图像/视频建立数据集还是成本很高的事情，而且还需要按标准才能得到比较靠谱的主观评分  
 #### LLM  
 结合LLM多模态输入图像给出文本评价的能力，进行主观评分  
+### OU-BIQA  
+无主观评分训练数据做NR IQA  
+#### Learn to Rank  
+获取绝对评分困难，但是比较两幅图像优劣相对而言简单，有这个信息也可以间接进行评分  
 ### 数据增强  
 感性的结论是VQA任务不应该做数据增强。经典的一些方法例如加噪声、变颜色、Mixup等方法应该都是不能用的，对画面质量会有影响。  
 一些空间变换如翻转、裁剪、resize理论上可能有效果。但负面影响未知。  
@@ -206,18 +217,28 @@ CNN好做一些，看权重低的连接、filter、通道就直接移除了。Tr
 #### 量化相对得分  
 分析resize、crop、sharpen等一些图像处理操作对图像质量评分的相对影响，在对原数据进行一些操作进行数据增强时，可以根据相对得分计算出一些假的分值，或许可以有用  
 这个是不是和zero-shot相关，通过数据的关系去推测标签的关系？  
-### 小数据集  
-#### 迁移训练  
+### 小数据集/零样本学习  
+#### 大数据预训练+小数据集微调  
 大数据集LSVQ上预训练的再放到小数据集上微调  
-#### 多任务学习  
+#### 相似任务预训练+小数据集微调  
 用数据量多的视频理解等任务预训练的模型作为底层模型，提取出公共的特征  
+#### 多任务学习  
+让模型同时学习多个相似的任务，可能能更好地提取出公共特征，损失函数就是多个任务合起来，例如同时跑目标检测、语义分割、姿态估计  
 #### 动态调整模型  
 VQA任务的主观性很强，如果不同用户有不同的评判标准（尤其是审美方面），已训练好的数据，能否实现用户自己个性化微调的效果？  
 在线学习？增量学习？  
+#### 自监督学习  
+跑不需要标签但是能获得和目标任务相关特征的一些任务来预训练模型  
+##### 对比学习  
+构造正负样本对，正样本对是原数据中同一个样本数据增强得到的，负样本对是原数据中不同样本（数据增强得到的），然后模型提取样本特征后用于计算相似度，目标是正样本对相似度高，负样本对相似度低，这样得到的模型也能提取有效特征  
+##### MAE  
+mask掉原数据的一部分让模型补全  
   
 ## 参考其他任务  
 ### 和视频理解任务关联  
-视频质量评估任务和视频理解任务相对而言是相似程度比较大的，都需要对视频空域时域的信息进行分析。而相比之下，视频理解任务是一个更加热门的研究领域，实际中很多VQA任务模型也会用到从视频列  
+视频质量评估任务和视频理解任务相对而言是相似程度比较大的，都需要对视频空域时域的信息进行分析。而相比之下，视频理解任务是一个更加热门的研究领域，实际中很多VQA任务模型也会用到从视频理解任务迁移过来的东西  
+### VQA和IQA关联  
+VQA相当于IQA加时域，在空域很多处理是相通的  
   
 # 代码  
 ## IQA  
@@ -334,6 +355,10 @@ ResNet50分4层特征图，池化统一大小之后连在一起输入Transformer
 回归Head  
 输入是一张图像随机crop 50张224x224然后结果取平均，有点夸张  
   
+### （21.10.25德州大学 CONTRIQUE）Image Quality Assessment using Contrastive Learning  
+预训练阶段跑自监督学习——对比学习，这里做的对比学习任务还是需要一点信息的，FR数据集上学习合成失真的知识，D种失真x(L+1)种失真级别可以分为D(L+1)类，然后跑对比学习拉近同类推远异类。NR数据集上学习真实失真的知识，这个理论上不那么好做，每张图像都是独立的，所以做个下采样就有同类了，和FR数据混在一起做训练。  
+预训练阶段获得的训练好的ResNet50，冻结住，然后加一个简单的线性回归头，这个线性回归头还是在目标数据集上训练的，想到于用对比学习获得的Backbone来提取特征。指标看起来还行，应该是FR的合成数据集上表现好，NR数据集上还是一般的。  
+  
 ### （22.4.29清华）MANIQA Multi-dimension Attention Network for No-Reference Image Quality Assessment  
 非常经典的Transformer IQA模型，指标爆杀之前所有模型，把注意力机制用的很好，值得学习  
 网络结构是直接ViT，输出结果又拼成图像之后过了卷积和Swin Transformer组成的Block，最后过一个两路的双层MLP，分别获得patch的分数和权重，最后加权求和得到整个图像的评分  
@@ -347,12 +372,31 @@ ResNet50分4层特征图，池化统一大小之后连在一起输入Transformer
 好像这里没有啥回归头，文本分支出的Embedding和图像分支出的Embedding得到余弦相似度就直接作为输出了，使用不同的的view、sum和argmax操作得到三个任务各自的预测结果，还挺神奇的  
 图像等间隔crop 15张224x224然后结果取平均  
   
+### （23.4.2德州大学）Re-IQA Unsupervised Learning for Image Quality Assessment in the Wild  
+MoE的模型，组合了两个无监督学习训练出来的模型，用的是对比学习？的方法  
+一个模型用来提取高层表示，理解图像内容，做法是用ImageNet上预训练的Resnet50再去怎么学？  
+一个模型用来提取低层表示，感知图像质量，做法还没看懂……  
+TODO  
+  
 ### （23.8.6NTU）TOPIQ A Top-down Approach from Semantics to  Distortions for Image Quality Assessment  
 TODO：模型稍有点复杂没太研究明白  
 核心的一个思路是考虑高层特征中包含的语义信息，然后用高层特征指导自顶向下指导底层特征，特征连线有点复杂，主要的改动都是在一些特征融合模块上，引入了gated local pooling block（GLP），self-attention block（SA），cross-scale attention block（CSA）三种模块  
 分了FR和NR两种模式，FR就要多融合一些参考图像的信息，看跑分还是相当高的  
 回归Head是一个三层的MLP，感觉不算很重要了，前面还有注意力模块，整体已经很复杂了  
 输入应该是任意size的，毕竟有GLP池化统一特征图大小，不过训练的时候针对不同数据集还是做了随机crop到384或者224，原图很大也会resize到448/384-416  
+  
+### （24.5.29港城大 Compare2Score）Adaptive Image Quality Assessment via Teaching Large Multimodal Model to Compare  
+引入LLM进行比较评分（对比两张图片给出差、较差、相似、较优、优的相对评级），也算是Q-Align模型引入LLM做主观评分的进一步拓展，可以绕开不同数据集之间MOS评分不一致没法混用的问题  
+TODO：分析下这里对比评分的用法  
+  
+### （24.5.29港城大 MDFS）Opinion-Unaware Blind Image Quality Assessment using Multi-Scale Deep Feature Statistics  
+这里讨论的是比较小众的OU-BIQA（BIQA就是NR IQA）任务，也就是没有带主观评分标签的训练数据，依然要做IQA，听起来就是没什么依据很难做。  
+做法挺有意思的，偏统计的方法。先是用预训练的CNN模型提取分层的图像特征（所谓的MDFS多尺度深度特征提取是金字塔形式下采样，前一层特征做下采样和后一层一致，最后统一特征图大小连接起来），通过统计方法把特征图转换为一个多维高斯分布，也就是实现了图像->高斯分布的映射。  
+评分的时候一方面搞了个高质量图像的数据集作为高分的基准，算出来这个数据集平均的高斯分布，然后测试图像也搞成高斯分布，计算两个高斯分布之间的距离得到评分。  
+想法很有意思，其实算是造出了FR IQA了。NR IQA中没有对应的参考图，随便找一些高质量图像做参考图？直接比较测试图和参考图的相似性并不好做，毕竟内容都不一样，但是过DNN获得的特征图再转统计学高斯分布表示，再计算相似性就有那么点道理了，可以认为减少了具体的内容信息，而是有一些内容无关的统计量表示，就能通过相似性发现图像退化程度  
+  
+### （24.8pub NTU CMKernel）Continual Learning of Blind Image Quality Assessment with Channel Modulation Kernel  
+TODO： 用了个通道调制核，没看明白是啥  
   
 ## VQA  
 有很多早期的模型现在看来指标都比较差了，所以没有往前看很多，可能会漏掉一些有意义的idea，有机会再看吧。整体看近年的论文大都是在采样方法上做文章，还是有很多相通之处的。  
@@ -423,6 +467,19 @@ backbone用的是4层注意力层的Swin-T网络，但还要做一点调整。�
 通过一个Transfomer提取时域失真（TODO：怎么实现的？是每一帧都输入吗）并获取每一帧的质量评分，这个Transfomer的输出再输入到另一个Transfomer进行内容的分析给出每一帧的质量权重，加权得到最终评分。  
 这样的做法明显就是给了时域质量更多的权重，看起来指标一般吧，可能还是需要时域失真比较明显的数据集才能有明显优势。  
   
+### （22.6.29德州大学）CONVIQT Contrastive Video Quality Estimator  
+TODO：引入对比学习的IQA模型CONTRIQUE的VQA版本  
+  
+### （22.7.8NTU TPQI）Exploring the Effectiveness of Video Perceptual Representation in Blind Video Quality Assessment  
+问题：   
+还是关注时域失真，视频的时域质量和人类视觉感知之间的关系不明确  
+做的是小众的Completely BVQA，也就是无标签训练数据的OU-BVQA  
+方法：  
+发现有个HVS域变换的方法，可以把一段视频帧转换为变换域的一个直线轨迹，而一旦有失真轨迹就会乱，变成混乱的弯曲轨迹。所以提出可以用一个TPQI指标，度量HVS变换域轨迹图的形态（straightness平直度 and compactness紧凑度），从而反应出视频时域质量。这种比较客观的指标就不需要训练模型去调参提特征做回归，可以跑OU-BVQA任务  
+具体的变换方法有两个  
+* lateral geniculate nucleus (LGN)  
+* primary visual area (V1)  
+  
 ### （22.10.9广州大学 HVS-5M）HVS Revisited: A Comprehensive Video Quality Assessment Framework  
 拼了5个模块提取5种特征输出最后的总分，指标也还不错，这几个特征可以关注下，也是比较直接的加人工特征的方式。TODO  
 用的Motion Perception、Temporal hysteresis、Content dependency、Visual saliency、Edge masking  
@@ -476,11 +533,14 @@ CVPR 2024
 2. 加一个空域不采样、时域采样的VQA模型，也不是输入全图，是算了全图的拉普拉斯金字塔做特征（文中的空间整流器）  
 3. 加一个时域不采样、空域采样的的VQA模型，可以多输入一些连续帧了（文中的时间整流器）  
 最后拿2、3模型的输出矫正1模型的输出，思路挺清楚的，理论上能发现一些别的模型发现不了的问题，就是在大部分公开数据集上刷分看提升不大，在4K、120Hz这种高分辨率高帧率的数据集上效果好，但复杂度估计也挺高  
+  
+### （23.4.12NTU PTQE）Blind Video Quality Prediction by Uncovering Human Video Perceptual Representation  
+22年TPQI的进一步扩展  
+TODO：  
+  
 ### （24.4.17快手组织竞赛论文）NTIRE 2024 ChallengeonShort-form UGC Video Quality Assessment: Methods and Results  
 可以看到很多魔改模型的思路去借鉴。因为卷的是准确率，所以基本上都是多模型在一通拼，魔改的会很复杂。  
 第一名是上交SimpleVQA作者和NTU FastVQA作者的联队，这有点欺负人了，直接把SimpleVQA和FastVQA的结果组合了，还附加了Q-Align和LIQE两个模型的结果一起，4个拼在一块很强。  
 但是整体看下来没有什么新的东西，毕竟是刷分的比赛，基本都是流行的这几个主流模型去一通合并，不过也可以看出来FastVQA（含Dover）、SimpleVQA、Q-Align等几个模型是经过检验的模型。  
 ### （24.5快手 PTM-VQA） PTM-VQA: Efficient Video Quality Assessment Leverage Diverse PreTrained Models from the Wild  
 TODO  
-  
-  
