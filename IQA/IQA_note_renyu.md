@@ -79,9 +79,12 @@ Structural Similarity Index 结构相似性
   
 还有一些时间久的IVC、Toyama、A57、WIQ数据量比较小了  
 TODO: 也有一些新的可能还没有完全普及作为通用标准，需要研究下，例如PieAPP, PIPAL, FLIVE, SPAQ, KADID-10k  
-#### TID 2013  
+#### FR-TID 2013  
 这个是目前最常用最权威的数据集。都是512\*384的BMP文件。3000张=25张图片\*24种失真类型\*5个失真等级  
 TODO: 具体格式  
+#### NR-LIVE Challenge（CLIVE）  
+比较小  
+  
 ### VQA数据集  
 * CVD2014  
 2014年赫尔辛基大学做的，算偏早期的数据集了。  
@@ -203,10 +206,12 @@ CNN好做一些，看权重低的连接、filter、通道就直接移除了。Tr
 主观评分很难搞，找人评图像/视频建立数据集还是成本很高的事情，而且还需要按标准才能得到比较靠谱的主观评分  
 #### LLM  
 结合LLM多模态输入图像给出文本评价的能力，进行主观评分  
-### OU-BIQA  
+#### OU-BIQA  
 无主观评分训练数据做NR IQA  
 #### Learn to Rank  
 获取绝对评分困难，但是比较两幅图像优劣相对而言简单，有这个信息也可以间接进行评分  
+### 跨数据集问题  
+不同IQA数据集的图像、MOS分布不一样，单一数据集训练过拟合，跨数据集性能一般也很差  
 ### 数据增强  
 感性的结论是VQA任务不应该做数据增强。经典的一些方法例如加噪声、变颜色、Mixup等方法应该都是不能用的，对画面质量会有影响。  
 一些空间变换如翻转、裁剪、resize理论上可能有效果。但负面影响未知。  
@@ -215,7 +220,7 @@ CNN好做一些，看权重低的连接、filter、通道就直接移除了。Tr
 #### JND  
 最小可察觉误差JND，把来自人眼视觉系统特性&心理效应的视觉冗余量化出来，可以指导编码和质量评估。通过JND来生成一些评分接近的训练数据做增强  
 #### 量化相对得分  
-分析resize、crop、sharpen等一些图像处理操作对图像质量评分的相对影响，在对原数据进行一些操作进行数据增强时，可以根据相对得分计算出一些假的分值，或许可以有用  
+分析resize、crop、sharpen、CutMix等一些图像处理操作对图像质量评分的相对影响，在对原数据进行一些操作进行数据增强时，可以根据相对得分计算出一些假的分值，或许可以有用  
 这个是不是和zero-shot相关，通过数据的关系去推测标签的关系？  
 ### 小数据集/零样本学习  
 #### 大数据预训练+小数据集微调  
@@ -247,7 +252,15 @@ VQA相当于IQA加时域，在空域很多处理是相通的
 #### 代码使用  
 1. 安装  
 应该还是比较好装的，感觉不一定要安装，装了可以用命令行工具pyiqa方便一些启动固定的IQA任务，并且随处import pyiqa，不过直接跑也可以  
+可以使用比较新的环境，下面的版本可以跑，就是numpy版本2.0新一点的话有个包里的sctypes用不了，注释掉就好  
 ```  
+conda create --name iqapytorch python=3.12  
+conda activate iqapytorch  
+conda install pytorch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 pytorch-cuda=12.1 -c pytorch -c nvidia  
+```  
+装包时本来还想着最小化安装，一些requirements里面不重要的包就不装了，结果setup.py的时候全自动装上了，所以没啥说的  
+```  
+pip install opencv-python-headless pandas pillow scipy scikit-learn tensorboard timm tqdm future einops（没必要手动安下）  
 git clone https://github.com/chaofengc/IQA-PyTorch.git  
 cd IQA-PyTorch  
 pip install -r requirements.txt  
@@ -258,8 +271,27 @@ python setup.py develop
 https://huggingface.co/datasets/chaofengc/IQA-Toolbox-Datasets  
 使用的时候下载数据集对应压缩包，推荐在代码目录创建datasets目录，然后解压到这里，可以匹配配置  
 除了数据集本身，所有数据集的标签文件和数据集划分设置，都打包到了一个meta_info.tgz文件，这个也要一起下载了解压到datasets目录  
+如果服务器可以访问Hugging Face，可以直接跑python脚本下载数据集，示例脚本项目README.md里有，在IQA-PyTorch目录下执行就行，想下什么数据集就改filename名就行  
+```  
+import os  
+from huggingface_hub import snapshot_download  
+  
+save_dir = './datasets'  
+os.makedirs(save_dir, exist_ok=True)  
+  
+filename = "meta_info.tgz"  
+snapshot_download("chaofengc/IQA-Toolbox-Datasets", repo_type="dataset", local_dir=save_dir, allow_patterns=filename, local_dir_use_symlinks=False)  
+  
+os.system(f"tar -xzvf {save_dir}/{filename} -C {save_dir}")  
+```  
 除此之外还可以关注下DataLoader的实现，基类定义在  
 pyiqa/data/base_iqa_dataset.py中，派生出通用的NR数据集DataLoader定义在pyiqa/data/general_nr_dataset.py中，然后一些数据集还需要有特殊的处理的要再自己派生实现DataLoader类  
+关于数据集划分比较规范，统一做了seed=123的划分文件，存了train、val、test数据集的数据index，然后DataLoader里会读取划分结果去加载训练集验证集测试集，并且都分了10种split，可以交叉验证，自己读一下  
+```  
+f = open("./datasets/meta_info/koniq10k_seed123.pkl",'rb')  
+split_dict = pickle.load(f)  
+print(split_dict[2]['train'])  
+```  
 3. 快速跑推理  
 -m指定模型，-i指定输入图像  
 ```  
@@ -301,6 +333,17 @@ model定义在pyiqa/models目录下，其实已经有比较好的一个基类Gen
 回归Head是分了预测和权重两路，每个小补丁预测分数，并预测补丁权重，最后加权平均获得整个图像的分数。  
 跑分在FR数据集上还可以，但是在NR数据集上比较差了。  
 不限制输入大小，训练的时候是每张图像随机crop 32个32x32的小补丁，测试的时候是整张图像不重叠的切补丁输入。  
+  
+  
+### （17.7.26巴塞罗那自治大学）RankIQA: Learning from Rankings for No-reference Image Quality Assessment  
+使用Learn to Rank预训练，生成一些退化后的图像可以知道和原图像比较的排序，这样就可以以图像对的形式输入孪生网络Siamese Network进行训练，认为可以拿到一些区分图像质量的特征，训练好的网络作为backbone再加回归头微调  
+比较早期的工作，指标应该挺一般的，后续也没什么后续的工作，具体效果如何有待进一部分分析  
+TODO  
+  
+### （19.2.17巴塞罗那自治大学 MT-RankIQA）Exploiting Unlabeled Data in CNNs by Self-supervised Learning to Rank  
+19年RankIQA的改进，加了多任务  
+TODO  
+  
   
 ### （19.7.5武大DBCNN）Blind Image Quality Assessment Using A Deep Bilinear CNN  
 效果很不错的CNN模型  
@@ -364,6 +407,10 @@ ResNet50分4层特征图，池化统一大小之后连在一起输入Transformer
 网络结构是直接ViT，输出结果又拼成图像之后过了卷积和Swin Transformer组成的Block，最后过一个两路的双层MLP，分别获得patch的分数和权重，最后加权求和得到整个图像的评分  
 输入是训练阶段一张图像随机crop一张224x224（反正多轮训练），测试阶段一张图像随机crop 20张224x224然后结果取平均  
   
+### （22.7.29港城大）Image Quality Assessment: Integrating Model-Centric and Data-Centric Approaches  
+不是Model的文章，而是分析问题的文章。实验评估了一些IQA模型的过拟合问题，以及一些数据集过于简单无法获取多种失真特征的问题。能分析这个问题还是挺有意义的。  
+认为既然发现有一些图像对于提升模型的泛化性没啥意义，那就应该增加多样性约束，选出更复杂、更多样性的样本，这样才能训练出好的模型。提出了采样更具多样性的图像样本的方法，没有细看，具体可以再分析下。  
+  
 ### （23.3上交BIQA模型LIQE）Blind Image Quality Assessment via Vision-Language Correspondence A Multitask Learning Perspective  
 把多模态大模型CLIP用于IQA任务，效果还可以，但是看指标还是弱于MANQIA的  
 在IQA任务中文本-图像对中的文本内容包含了场景、失真、质量评分信息，例如“xx场景图像，有xx失真，质量xx”。  
@@ -384,6 +431,20 @@ TODO：模型稍有点复杂没太研究明白
 分了FR和NR两种模式，FR就要多融合一些参考图像的信息，看跑分还是相当高的  
 回归Head是一个三层的MLP，感觉不算很重要了，前面还有注意力模块，整体已经很复杂了  
 输入应该是任意size的，毕竟有GLP池化统一特征图大小，不过训练的时候针对不同数据集还是做了随机crop到384或者224，原图很大也会resize到448/384-416  
+  
+### （23.10.20佛罗伦萨大学）ARNIQA Learning Distortion Manifold for Image Quality Assessment  
+  
+### （23.12.12南京大学SaTQA）Transformer-based No-Reference Image Quality Assessment via Supervised Contrastive Learning  
+网络结构还是比较复杂的，做的比较长。整体分两路，一路提取失真Distortion特征R，一路提取退化特征P。  
+首先是失真特征提取，做了一个融合CNN和Transfomer的Multi-Stream Block。图像先过ViT得到特征图F，然后又分三路：  
+第一路过DeformConv和线性层（CNN Low-Level）  
+第二路过depthwise卷积层和最大池化（CNN Low-Level）  
+第三路过多头自注意力和线性层（Transfomer Low-Level）  
+最后三路结果合起来得到的F'再和ViT直接得到的特征图F过CBAM注意力模块的结果做差分。这样的MSB块还搞了三个，前两个还有下采样。最终得到失真特征R。  
+另一路退化特征提取，网络就是ResNet50+MLP，但是做了对比学习：很类似CONTRIQUE的做法，预训练阶段做自监督学习，方法是对比学习，具体任务也是湿疹图像的失真类型&失真程度分类，和CONTRIQUE的区别是只用合成数据集中的参考图像不用UGC图像（这也算进步吗？）。最后只使用Backbone部分预提取出退化特征P。  
+还用了个Patch注意力块进行特征融合，把两路提取的特征P和R拼在一起，再去做回归。应该算是模型魔改玩的相当6的网络了。  
+跑分结果也是相当好，全面超MANIQA的。  
+预处理上应该训练和测试都是一张图像输入8个random crop的224x224块  
   
 ### （24.5.29港城大 Compare2Score）Adaptive Image Quality Assessment via Teaching Large Multimodal Model to Compare  
 引入LLM进行比较评分（对比两张图片给出差、较差、相似、较优、优的相对评级），也算是Q-Align模型引入LLM做主观评分的进一步拓展，可以绕开不同数据集之间MOS评分不一致没法混用的问题  
@@ -432,6 +493,10 @@ TODO： 用了个通道调制核，没看明白是啥
 这个好像后面模型对比的少一些，主要的思路是想提取多尺度特征，从而可以适配不同分辨率，不同时长的视频输入。  
 我觉得比较特别的点是网络结构设计的好像稍有点复杂，我有点没太看明白，大概是VGG16->Transformer->MLP->GRU，认为这样子有空域的多尺度特征，然后对于GRU输出的多帧时域结果，训练阶段还做了高斯正则化，测试时还做了金字塔特征聚合，可能对短期长期的时域影响处理的更好。  
 因为最后指标跑出来一般般，这个模型不细分析了，往多尺度的思路去思考还是可以的。  
+  
+### （21.7.28上交 TSN-IQA）Task-Specific Normalization for Continual Learning of Blind Image Quality Models  
+持续学习，可以连学多个不同的IQA数据集不会串  
+TODO  
   
 ### （21.8.19上交 BVQA）Blindly Assess Quality of In-the-Wild Videos via Quality-Aware Pre-Training and Motion Perception  
 SimpleVQA的前身，大体思路是相似的。  
@@ -502,9 +567,17 @@ TODO：DOVER具体网络设计，我理解技术分应该还是类似Fast-VQA的
 ### （23.1.3谷歌）MRET Multi-resolution transformer for video quality assessment  
 TODO  
   
+### （23.4.12NTU PTQE）Blind Video Quality Prediction by Uncovering Human Video Perceptual Representation  
+22年TPQI的进一步扩展  
+TODO：  
+  
 ### （23.4 NTIRE VQA竞赛）NTIRE 2023 QA of Video Enhancement Challenge  
 淘宝团队基于SimpleVQA的模型拿了冠军，在数据增强上做了比较多。TODO：需要借鉴下  
 ### （23.4.19上交）MD-VQA Multi-Dimensional Quality Assessment for UGC Live Videos  
+TODO  
+  
+### （23.6.26上交 MinimalisticVQA）Analysis of Video Quality Datasets via Design of Minimalistic Video Quality Models  
+似乎是对现有VQA数据集有一些分析  
 TODO  
   
 ### （23.5.22 NTU MaxVQA）Towards Explainable In-the-Wild Video Quality Assessment: A Database and a Language-Prompted Approach  
@@ -534,13 +607,13 @@ CVPR 2024
 3. 加一个时域不采样、空域采样的的VQA模型，可以多输入一些连续帧了（文中的时间整流器）  
 最后拿2、3模型的输出矫正1模型的输出，思路挺清楚的，理论上能发现一些别的模型发现不了的问题，就是在大部分公开数据集上刷分看提升不大，在4K、120Hz这种高分辨率高帧率的数据集上效果好，但复杂度估计也挺高  
   
-### （23.4.12NTU PTQE）Blind Video Quality Prediction by Uncovering Human Video Perceptual Representation  
-22年TPQI的进一步扩展  
-TODO：  
-  
 ### （24.4.17快手组织竞赛论文）NTIRE 2024 ChallengeonShort-form UGC Video Quality Assessment: Methods and Results  
 可以看到很多魔改模型的思路去借鉴。因为卷的是准确率，所以基本上都是多模型在一通拼，魔改的会很复杂。  
 第一名是上交SimpleVQA作者和NTU FastVQA作者的联队，这有点欺负人了，直接把SimpleVQA和FastVQA的结果组合了，还附加了Q-Align和LIQE两个模型的结果一起，4个拼在一块很强。  
 但是整体看下来没有什么新的东西，毕竟是刷分的比赛，基本都是流行的这几个主流模型去一通合并，不过也可以看出来FastVQA（含Dover）、SimpleVQA、Q-Align等几个模型是经过检验的模型。  
 ### （24.5快手 PTM-VQA） PTM-VQA: Efficient Video Quality Assessment Leverage Diverse PreTrained Models from the Wild  
 TODO  
+  
+  
+涂必超. 图像质量评估综述[EB/OL]. 2018. https://zhuanlan.zhihu.com/p/32553977/.  
+YaqiLYU. 全参考图像质量评价方法整理与实用性探讨[EB/OL]. 2018. https://zhuanlan.zhihu.com/p/24804170.  
