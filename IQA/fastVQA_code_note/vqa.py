@@ -1,4 +1,5 @@
 
+# renyu: 简单推理一个.mp4视频文件给出评分的测试demo，可以简单看下怎么加载模型
 import yaml
 import decord
 from fastvqa.datasets import get_spatial_fragments, SampleFrames, FragmentSampleFrames
