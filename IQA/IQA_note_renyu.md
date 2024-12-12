@@ -64,21 +64,31 @@ Structural Similarity Index 结构相似性
   
 ## 关于数据集  
 ### IQA数据集  
-比较经典的4个常用的有参考IQA数据集列在表里  
+#### FR-IQA数据集  
+比较经典的5个常用的有参考IQA数据集列在表里  
 | 数据集 | 参考图像数 | 失真图像数 | 失真类型数 | 测试人员数 |  
 | --- | --- | --- | --- | --- |  
+| KADID-10k | 81 | 10125 | 25 |  |  
 | TID 2013 | 25 | 3000 | 24 | 971 |  
 | TID 2008 | 25 | 1700 | 17 | 838 |  
 | CSIQ | 30 | 866 | 6 | 35 |  
 | LIVE | 29 | 779 | 5 | 161 |  
+  
+#### NR-IQA数据集  
 无参数据集有  
 * LIVE-Challenge  
 2016年的一个in the wild数据集，1162张照片，8100人标注，35万份评分，MOS分数[3.42, 92.43]  
 * KonIQ-10K  
 2020年的一个in the wild数据集，10073张照片，1459人标注，120万份评分，MOS分数[3.91, 88.39]  
   
+做美学评分专门有个很大的AIA数据集  
+* AIA (Aesthetic Visual Analysis)  
+论文是2012年发布的，数据集应该更早。255508张照片，每张图投票数78-549，平均210票，MOS分数1-10共十个级别  
+每一个图像的分数都是给的1-10分值的分布。还有语义标签、摄影风格标签  
+分析了分数分布发现基本都可以用高斯分布近似（个别新锐风格图片方差大）  
+  
 还有一些时间久的IVC、Toyama、A57、WIQ数据量比较小了  
-TODO: 也有一些新的可能还没有完全普及作为通用标准，需要研究下，例如PieAPP, PIPAL, FLIVE, SPAQ, KADID-10k  
+TODO: 也有一些新的可能还没有完全普及作为通用标准，需要研究下，例如PieAPP, PIPAL, FLIVE, SPAQ  
 #### FR-TID 2013  
 这个是目前最常用最权威的数据集。都是512\*384的BMP文件。3000张=25张图片\*24种失真类型\*5个失真等级  
 TODO: 具体格式  
@@ -181,6 +191,9 @@ FastVQA的Grid Mini-patch Sampling（GMS）方法，分网格后在网格内部�
 ## 模型魔改  
 ### CNN分层特征  
 ### 注意力机制Block  
+### 回归头  
+提取特征后过回归头获得IQA/VQA评分，这里似乎没有太多可以做的，传统的就是支持向量回归、随机森林回归，基本没见使用  
+现在基本是MLP回归头，并且不用做很深。两路MLP回归头一路预测分块权重一路预测分块分数最后加权求和也是常见做法  
 ### 新模型  
 #### Mamba  
 #### RMKV  
@@ -211,7 +224,7 @@ CNN好做一些，看权重低的连接、filter、通道就直接移除了。Tr
 #### Learn to Rank  
 获取绝对评分困难，但是比较两幅图像优劣相对而言简单，有这个信息也可以间接进行评分  
 ### 跨数据集问题  
-不同IQA数据集的图像、MOS分布不一样，单一数据集训练过拟合，跨数据集性能一般也很差  
+不同IQA数据集的图像、MOS分布不一样，很难放在一起训练/验证。并且在单一数据集训练过拟合，跨数据集性能一般也很差。如何联合多个数据集，获得较好的泛化性能还是很有意义的  
 ### 数据增强  
 感性的结论是VQA任务不应该做数据增强。经典的一些方法例如加噪声、变颜色、Mixup等方法应该都是不能用的，对画面质量会有影响。  
 一些空间变换如翻转、裁剪、resize理论上可能有效果。但负面影响未知。  
@@ -222,11 +235,13 @@ CNN好做一些，看权重低的连接、filter、通道就直接移除了。Tr
 #### 量化相对得分  
 分析resize、crop、sharpen、CutMix等一些图像处理操作对图像质量评分的相对影响，在对原数据进行一些操作进行数据增强时，可以根据相对得分计算出一些假的分值，或许可以有用  
 这个是不是和zero-shot相关，通过数据的关系去推测标签的关系？  
+### 图像增强+IQA  
+图像增强模型一般包含了一些质量相关的信息。利用图像增强模型预提取特征；使用图像增强模型为NR-IQA获得伪参考图像……可能有利于IQA任务  
 ### 小数据集/零样本学习  
 #### 大数据预训练+小数据集微调  
 大数据集LSVQ上预训练的再放到小数据集上微调  
 #### 相似任务预训练+小数据集微调  
-用数据量多的视频理解等任务预训练的模型作为底层模型，提取出公共的特征  
+用数据量多的视频理解、失真类型&级别分类等任务预训练的模型作为底层模型，提取出公共的特征  
 #### 多任务学习  
 让模型同时学习多个相似的任务，可能能更好地提取出公共特征，损失函数就是多个任务合起来，例如同时跑目标检测、语义分割、姿态估计  
 #### 动态调整模型  
@@ -348,7 +363,7 @@ TODO
 ### （19.7.5武大DBCNN）Blind Image Quality Assessment Using A Deep Bilinear CNN  
 效果很不错的CNN模型  
 网络结构分了两路，一路是只保留Backbone的S-CNN合成失真分类任务预训练模型，一路是只保留Backbone的VGG-16 ImageNet分类预训练模型，相当于合并了两个预训练CV模型。  
-两路的合并方式是bilinear pooling，得到512x128的特征图。  
+两路的合并方式是bilinear pooling，是一种挺不错的特征融合方法，得到512x128的特征图。  
 回归Head就是一层线性回归层，512x128->1  
 S-CNN和VGG-16本身应该都是限制224x224的，但是合在一起做了池化应该是不限制输入大小的，所以实际训练的时候就是随机crop到448/384，验证好像就是原图  
   
@@ -357,14 +372,33 @@ S-CNN和VGG-16本身应该都是限制224x224的，但是合在一起做了池�
 做了个模型就是ResNet-18改改，因为有了patch评分的信息，所以引入了ROIPool加权，把patch质量评估结果和全局质量评估结果一起考虑得到最后得分，会比光输入图片高一些  
 感觉这也不太算是数据增强的技术，patch也是做了主观评分实验的……  
   
+### （20.1.20康斯坦茨大学）DeepFL-IQA: Weak Supervision for Deep IQA Feature Learning  
+这篇文章主要是做了KADID-10k数据集所以很重要。  
+但其实这个论文也提了个DeepFL-IQA方法，也还挺有意思，思路是使用大量有FR-IQA评分的数据来弱监督训练NR-IQA，所以同时还搞了个KADIS-700k数据集。这个数据集是140000张原始图像，然后随机每个找一种失真降级5个级别，所以有700k个失真图像，但没有主观评分，有11种FR-IQA方法的客观评分。  
+TODO：具体的方法还是不太确定细节  
+第一阶段预训练，是在KADIS-700k数据集上做多任务训练，同时预测11个FR-IQA的结果，认为这个预训练模型就可以提取到很有用的特征。第二阶段用预训练模型结合多尺度空间池化MSLP提取图像特征，加一个回归头预测分数。  
+也就是说，用足够多质量评估相关的任务预训练出来的模型就能很好的获取质量相关特征。  
+这个工作在KADID-10k上直接跑出0.936的高分了，这种评分得MANIQA这种才能打，其他数据集上没有这么夸张也还是比较高的，在当时绝对是SOTA了，后续工作很少对比这个，不知道是不是这个原因。  
+  
+  
 ### （20.3.7西工大 HyperIQA）Blindly Assess Image Quality in the Wild Guided by a Self-Adaptive Hyper Network  
 TODO：思路没太看明白，大致是把ResNet的高层语义特征和底层纹理特征分开处理了  
 ResNet之后高层语义特征分了一路输入啥内容理解网络，分层特征输入MLP。然后内容理解网络的分层输出又输入MLP，反正最后出的结果抽象理解下就是综合了高层和底层的特征，把CNN用的比较充分了  
 输入是一张图像随机crop 25张224x224然后结果取平均  
   
-### （20.4.11西安电子科大）MetaIQA Deep Meta-learning for No-Reference Image Quality Assessment  
+### （20.4.11西安电子科大）MetaIQA: Deep Meta-learning for No-Reference Image Quality Assessment  
 好像是在合成数据集上训练然后去跑真实失真数据集，普通CNN模型  
 合成失真数据集上还可以，但是真实失真数据集上指标挺差，感觉参考价值有限  
+  
+### （20.5.18西安电子科大 AIGQA）Blind Image Quality Assessment With Active Inference  
+图像增强+IQA  
+使用GAN网络获得增强后的图像，然后和原图作差得到失真图，和原图求相似性得到结构退化图。四个图作为输入过CNN+MLP得回归结果  
+说法是用GAN网络获得增强图像来模拟人类视觉看到图像后有个主动推理的过程，叫啥IGM内部生成机制，可能就是会想象出应该有的样子做FR？  
+比较早的工作跑分挺一般的，直观感觉这种很直接的处理实际还是没引入多少有用的特征，也取决于GAN网络的增强效果，应该没有很好  
+  
+### （20.6.10天津大学）VCRNet: Visual Compensation Restoration Network for No-Reference Image Quality Assessment  
+图像增强+IQA，之前有一些通过GAN进行图像增强获得“参考图像”然后分析原图和参考图之间差异来做IQA的工作，但问题是GAN生成的参考图像不靠谱，其实有问题，拿来做IQA效果也不稳定。  
+所以这里没有用基于GAN的图像增强网络，而是做了一个改了下的U-Net图像增强（恢复）网络，从中取分层特征也会比较方便。最后用图像增强网络Decoder输出的分层特征融合EfficientNet的分层特征做IQA，效果还不错。  
   
 ### （20.12.30挪威研究中心 TIQAorTRIQ）Transformer for Image Quality Assessment  
 应该就是比较早的Transformer用法  
@@ -402,14 +436,30 @@ ResNet50分4层特征图，池化统一大小之后连在一起输入Transformer
 预训练阶段跑自监督学习——对比学习，这里做的对比学习任务还是需要一点信息的，FR数据集上学习合成失真的知识，D种失真x(L+1)种失真级别可以分为D(L+1)类，然后跑对比学习拉近同类推远异类。NR数据集上学习真实失真的知识，这个理论上不那么好做，每张图像都是独立的，所以做个下采样就有同类了，和FR数据混在一起做训练。  
 预训练阶段获得的训练好的ResNet50，冻结住，然后加一个简单的线性回归头，这个线性回归头还是在目标数据集上训练的，想到于用对比学习获得的Backbone来提取特征。指标看起来还行，应该是FR的合成数据集上表现好，NR数据集上还是一般的。  
   
+### （22.2.24NTU）Distilling Knowledge From Object Classification to Aesthetics Assessment  
+搞的美学评估，跑的AVA数据集。  
+做的东西巨简单，但是故事讲的还挺有道理，写法值得借鉴，一开始一堆名词把我看懵逼了。  
+背景是认为直接拿分类任务预训练模型提取的特征（定义为GSF通用语义特征）做美学评分任务效果不好，没有直接在美学评分数据集上训练获得的美学特征效果好，说明通用语义特征不能很好地用于美学评估。  
+但是认为通用语义特征中包含用于美学评估的信息，所以搞了多个分类任务预训练模型，输出特征做多层空间池化（MLSP）连起来。然后用BN层+三层MLP预测结果就好了（多个预训练模型特征拼个回归头）。那认为第二层MLP输出的特征就是从通用语义特征中提取出来的美学特征。  
+再做了个知识蒸馏，简单网络学第二层MLP输出的美学特征和第三层MLP输出的预测结果，效果也很不错。  
+  
 ### （22.4.29清华）MANIQA Multi-dimension Attention Network for No-Reference Image Quality Assessment  
 非常经典的Transformer IQA模型，指标爆杀之前所有模型，把注意力机制用的很好，值得学习  
 网络结构是直接ViT，输出结果又拼成图像之后过了卷积和Swin Transformer组成的Block，最后过一个两路的双层MLP，分别获得patch的分数和权重，最后加权求和得到整个图像的评分  
 输入是训练阶段一张图像随机crop一张224x224（反正多轮训练），测试阶段一张图像随机crop 20张224x224然后结果取平均  
   
+### （22.7.25NTU CLIP-IQA）Exploring CLIP for Assessing the Look and Feel of Images  
+早期MLLM做IQA任务的工作，思路简单直接，计算图像Embedding和文本Embedding的余弦相似度来得到质量评分。  
+文本尝试了一些不同的方式，例如“This is a high/low quality photo”,“This is a photo of high/low quality”等，最后发现最简单的“good/bad photo”是最好的，而且good/bad正反去比较比单独用good比较效果更好，思路有点意思。  
+  
 ### （22.7.29港城大）Image Quality Assessment: Integrating Model-Centric and Data-Centric Approaches  
 不是Model的文章，而是分析问题的文章。实验评估了一些IQA模型的过拟合问题，以及一些数据集过于简单无法获取多种失真特征的问题。能分析这个问题还是挺有意义的。  
 认为既然发现有一些图像对于提升模型的泛化性没啥意义，那就应该增加多样性约束，选出更复杂、更多样性的样本，这样才能训练出好的模型。提出了采样更具多样性的图像样本的方法，没有细看，具体可以再分析下。  
+  
+### （22.8.25上交 StairIQA）Blind Quality Assessment for in-the-Wild Images via Hierarchical Feature Fusion and Iterative Mixed Database Training  
+两个创新点都有点意思  
+一是把分层特征做了更复杂的一个融合方法，不是分开处理，而是逐层的合并。处理流程像是阶梯状，第一层分层特征过个卷积，加上第二层分层特征后再过个卷积，加上第三次分层特征后再过个卷积，加上第四次分层特征后再过个卷积；同理2、3、4的加；3、4的加；4的单独加。最后能拿到4路融合后的分层特征，再加回到正常第5层输出的高级特征。看消融实验结果还是有点用，不是很大。这里我理解应该没有分层特征分出来再过注意力block这种做法性能好，但是最后还是只输出一份特征，是一个融合和低层、高层特征的结果，比直接用分类模型的高层特征做IQA还是要好一些，相当于增加了低层特征的权重吧。  
+二是多个数据集的数据放在一起训练，这个看起来做的还不错，多数据集训练本身也是不太好做的一个点。这里做法比较简单，就是特征提取的backbone是多个数据集训练的，回归头是每个数据集上训练的。具体迭代流程要看代码。  
   
 ### （23.3上交BIQA模型LIQE）Blind Image Quality Assessment via Vision-Language Correspondence A Multitask Learning Perspective  
 把多模态大模型CLIP用于IQA任务，效果还可以，但是看指标还是弱于MANQIA的  
@@ -425,6 +475,13 @@ MoE的模型，组合了两个无监督学习训练出来的模型，用的是�
 一个模型用来提取低层表示，感知图像质量，做法还没看懂……  
 TODO  
   
+### （23.5.5南京邮电大学 DPNet）Learning Hybrid Representations of Semantics and Distortion for Blind Image Quality Assessment  
+没查到接收日期，应该22年的  
+想法挺好，是用多任务训练的方法想办法用单个网络同时学到语义表示和失真表示，不需要像大部分其他IQA模型一样融合两个网络特征  
+做法用知识蒸馏学ResNet152的特征，从而学语义表示；然后接MLP跑失真分类任务微调学失真表示。最后再接另一个MLP去预测IQA分数。  
+TODO：没仔细研究这个训练过程，如果是分阶段还叫多任务吗？学失真表示的时候会不会影响语义表示的记忆了？  
+看指标整体一般，但是在KADID-10k上SROCC 0.923是不错的成绩了，直观感觉应该跑不过两个网络结合的模型才对，但是没开源代码分析不了……  
+  
 ### （23.8.6NTU）TOPIQ A Top-down Approach from Semantics to  Distortions for Image Quality Assessment  
 TODO：模型稍有点复杂没太研究明白  
 核心的一个思路是考虑高层特征中包含的语义信息，然后用高层特征指导自顶向下指导底层特征，特征连线有点复杂，主要的改动都是在一些特征融合模块上，引入了gated local pooling block（GLP），self-attention block（SA），cross-scale attention block（CSA）三种模块  
@@ -432,7 +489,18 @@ TODO：模型稍有点复杂没太研究明白
 回归Head是一个三层的MLP，感觉不算很重要了，前面还有注意力模块，整体已经很复杂了  
 输入应该是任意size的，毕竟有GLP池化统一特征图大小，不过训练的时候针对不同数据集还是做了随机crop到384或者224，原图很大也会resize到448/384-416  
   
+### （23.9.24广州大学）CDINet Content Distortion Interaction Network for Blind Image Quality Assessment  
+图像增强+IQA。主要参考了VCRNet的工作，区别是VCRNet中直接用的U-Net图像增强网络Decoder部分分层特征，这里是又做了一路Decoder恢复原始图像也得到分层特征，那增强和原始的分层特征作差其实得到的就是差分的“失真特征”。  
+然后和CNN直接提取的特征做融合的时候也不是直接加，而是用了注意力模块。  
+跑分看起来还可以，不过也和MANIQA有差距。代码没开源。  
+  
 ### （23.10.20佛罗伦萨大学）ARNIQA Learning Distortion Manifold for Image Quality Assessment  
+  
+### （23.10.21重庆邮电大学 PINet）Blind Image Quality Assessment With Coarse-Grained Perception Construction and Fine-Grained Interaction Learning  
+注意力特征融合做的比较特别。  
+网络结构是先用了StairIQA的Backbone，获取了一个分层特征融合比较好的特征图。然后分两路ResNet+MLP，预训练阶段用合成失真数据集训练，一路用两张图像输入比较质量好坏的任务训练获取质量相关特征，一路用失真类型分类任务训练获取失真相关特征。  
+微调阶段用真实失真数据集训练，是把上面两路ResNet的分层特征用注意力机制连接起来（这里的连接方式还挺有意思，相当于每一层混合后输入下一层），说是这样模拟人脑同时处理质量和失真信息。  
+最后跑分不算高还可以，专门做了FG-IQA的验证，不过只是分了高质量和低质量两半（分太多肯定分不好看），看起来还可以，比DBCNN、HyperIQA好一点  
   
 ### （23.12.12南京大学SaTQA）Transformer-based No-Reference Image Quality Assessment via Supervised Contrastive Learning  
 网络结构还是比较复杂的，做的比较长。整体分两路，一路提取失真Distortion特征R，一路提取退化特征P。  
@@ -441,7 +509,7 @@ TODO：模型稍有点复杂没太研究明白
 第二路过depthwise卷积层和最大池化（CNN Low-Level）  
 第三路过多头自注意力和线性层（Transfomer Low-Level）  
 最后三路结果合起来得到的F'再和ViT直接得到的特征图F过CBAM注意力模块的结果做差分。这样的MSB块还搞了三个，前两个还有下采样。最终得到失真特征R。  
-另一路退化特征提取，网络就是ResNet50+MLP，但是做了对比学习：很类似CONTRIQUE的做法，预训练阶段做自监督学习，方法是对比学习，具体任务也是湿疹图像的失真类型&失真程度分类，和CONTRIQUE的区别是只用合成数据集中的参考图像不用UGC图像（这也算进步吗？）。最后只使用Backbone部分预提取出退化特征P。  
+另一路退化特征提取，网络就是ResNet50+MLP，但是做了对比学习：很类似CONTRIQUE的做法，预训练阶段做自监督学习，方法是对比学习，具体任务也是失真图像的失真类型&失真程度分类，和CONTRIQUE的区别是只用合成数据集中的参考图像不用UGC图像（这也算进步吗？）。最后只使用Backbone部分预提取出退化特征P。  
 还用了个Patch注意力块进行特征融合，把两路提取的特征P和R拼在一起，再去做回归。应该算是模型魔改玩的相当6的网络了。  
 跑分结果也是相当好，全面超MANIQA的。  
 预处理上应该训练和测试都是一张图像输入8个random crop的224x224块  
@@ -456,8 +524,23 @@ TODO：分析下这里对比评分的用法
 评分的时候一方面搞了个高质量图像的数据集作为高分的基准，算出来这个数据集平均的高斯分布，然后测试图像也搞成高斯分布，计算两个高斯分布之间的距离得到评分。  
 想法很有意思，其实算是造出了FR IQA了。NR IQA中没有对应的参考图，随便找一些高质量图像做参考图？直接比较测试图和参考图的相似性并不好做，毕竟内容都不一样，但是过DNN获得的特征图再转统计学高斯分布表示，再计算相似性就有那么点道理了，可以认为减少了具体的内容信息，而是有一些内容无关的统计量表示，就能通过相似性发现图像退化程度  
   
+### （24.6.3清华）UniQA Unified Vision-Language Pre-training for Image Quality and Aesthetic Assessment  
+TODO  
+拿MLLM做图像质量&审美评分的，好像跑分还挺高。  
+  
 ### （24.8pub NTU CMKernel）Continual Learning of Blind Image Quality Assessment with Channel Modulation Kernel  
 TODO： 用了个通道调制核，没看明白是啥  
+  
+### FG-IQA  
+细粒度IQA问题相关的论文单独列一下  
+#### （21.6.17国科大 细粒度IQA综述）Fine-Grained Image Quality Assessment A Revisit and Further Thinking  
+开新坑的综述，很清晰地解释了为什么要研究FG-IQA问题：看当前IQA模型整体的SROCC/PLCC/KROCC指标似乎已经很高了，但实际上在具体一个失真级别的图像中测试结果非常差，也就是根本区分不出来  
+挺有意思的一个工作就是数学仿真了多个级别之间排序全对，但同一级别之内排序很差的情况，发现只要大的级别预测对，就可以获得0.8甚至0.9的总SROCC/PLCC/KROCC，实际同一级别内的正确率可能很低，定义为“统计掩盖细节”现象  
+由此也引入了FG-IQA问题，狭义上指的是FR-IQA数据集上同一失真级别的图像能够准确评分并排序，但是我理解广义上其实就是在小的一段质量区间上也可以取得很准确的排序结果，提升IQA分数预测的“精度”  
+文中没有很深入说明为什么要做FG-IQA，我的理解是在一些具体的图像压缩/增强任务上，需要有精度很高的IQA评分作为指标。  
+文中对于FG-IQA问题怎么做，大致提出的思路是区分特定的应用场景去优化，介绍了图像压缩、图像去噪、图像重定向、色调映射、其他（对比度增强、超分、去雾）等任务上的一些能取得更好FG-IQA结果的一些研究。大致的做法是基于特定的失真数据，提取特定的特征，然后设计特定的模型。（个人感觉区分场景优化比较工程了，做不到通用的优化，不知道往更通用的FG-IQA去做有没有前途）  
+还有关于FG-IQA的挑战，说了很多项，我总结下：一是数据集构建问题，很小的质量差异人其实也很难区分，并且主观评价基本只能做FR的了，但设置参考图可能造成bias；二是泛化问题，针对不同失真提取的特征换一种失真一般就不适用了。放到NR-IQA任务上连失真类型、级别都拿不到，那就更难做了。  
+  
   
 ## VQA  
 有很多早期的模型现在看来指标都比较差了，所以没有往前看很多，可能会漏掉一些有意义的idea，有机会再看吧。整体看近年的论文大都是在采样方法上做文章，还是有很多相通之处的。  
@@ -613,7 +696,3 @@ CVPR 2024
 但是整体看下来没有什么新的东西，毕竟是刷分的比赛，基本都是流行的这几个主流模型去一通合并，不过也可以看出来FastVQA（含Dover）、SimpleVQA、Q-Align等几个模型是经过检验的模型。  
 ### （24.5快手 PTM-VQA） PTM-VQA: Efficient Video Quality Assessment Leverage Diverse PreTrained Models from the Wild  
 TODO  
-  
-  
-涂必超. 图像质量评估综述[EB/OL]. 2018. https://zhuanlan.zhihu.com/p/32553977/.  
-YaqiLYU. 全参考图像质量评价方法整理与实用性探讨[EB/OL]. 2018. https://zhuanlan.zhihu.com/p/24804170.  
