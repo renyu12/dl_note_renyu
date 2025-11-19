@@ -55,7 +55,7 @@ caption内容描述（事件、动作、场景）
 合成失真  
 ## 音频模态处理  
 视频帧与音频特征对齐  
-是否要评估不同失真类型和失真级别  
+是否要评估不同失真类型和失真级别（音频的失真类型&失真级别不好设定）  
 音画不同步失真？  
 UGC视频有语音、音乐、环境音，还有一些复杂的情况如特效音、噪声、动作声、动物声、机械声等，很难覆盖  
 ## 文本模态处理  
@@ -116,6 +116,7 @@ UGC视频有语音、音乐、环境音，还有一些复杂的情况如特效�
 | LIVE-SJTU | 14 | 336 | 视频压缩、音频压缩 | 1920×1080 | 8秒 |  
 | UnB-AVC | 6 | 72 | 视频压缩、音频压缩 | 1280×720 | 8秒 |  
 不过早期也有一些，例如INRS数据集等，都是参考视频很少，做了多级音视频失真的FR AVQA数据集  
+UnB-AVC 2018比较大，较难下载  
 ## 一些音频相关任务  
 ### AQA  
 早期有很多是关于语音的，用于优化通话质量的  
@@ -123,10 +124,12 @@ P.800 Subjective Speech Quality Database（ITU-T）
 VoiceBank-DEMAND（用于语音增强的音频质量评估）  
 AV-VoIP（音视频通信质量评估数据集）  
 DNS Challenge Dataset（用于噪声抑制和语音质量评估）  
+ODAQ 2023年较新的数据集，25个原始音乐类音频，做了一些失真后搞成240个  
 ### 音视频中音频分类  
 2017 AudioSet  
 2020 VGGSound  
 都是YouTube上的视频，打了音频分类标签  
+TODO：LAION系列数据集关注下，audiobox似乎相关  
 ## 一些视频相关下游任务  
 ### 视频理解  
 MSR-VTT  
@@ -142,8 +145,98 @@ VQA v2
 涉及YouTube视频用yt-dlp库  
 比较棘手的问题是现在YouTube对于视频下载限频很严格，发现并发请求后很可能会封禁账号一段时间导致无法访问视频资源，需要控制请求频率慢慢下载  
   
+# 工具使用  
+## Audiobox  
+https://github.com/facebookresearch/audiobox-aesthetics  
+  
+源码安装，不少依赖单独开个env吧  
+```  
+git clone https://github.com/facebookresearch/audiobox-aesthetics.git  
+cd audiobox-aesthetics  
+pip install -e .  
+```  
+准备一个输入文件路径列表json文件，例如  
+```  
+{"path":"/path/to/a.wav"}  
+{"path":"/path/to/b.flac"}  
+```  
+准备好要评估的音频文件路径写入这个json文件  
+有个依赖包没有，手动补下  
+```  
+pip install rich  
+```  
+然后就可以执行了，是批量处理的，checkpoint似乎是自动下载的，如果自己下也可以指定路径  
+```  
+audio-aes input.jsonl --batch-size 100 > output.jsonl  
+```  
+## PAM  
+https://github.com/soham97/pam  
+  
+源码安装还比较简单，遇到的问题是AutoDL上下载HF模型可能卡住，自己手动下载两个依赖的大一点的文件，然后手动指定加载目录不要下载，一个是PAM/PAM.py用到的CLAP_weights_2023.pth，一个是PAM/models/clap.py里用到的text_model GPT2  
+```  
+git clone https://github.com/soham97/PAM.git  
+cd PAM   
+conda create -n pam python=3.10  
+conda activate pam  
+pip install -r requirements.txt  
+```  
+提供了直接推理的脚本，但这个是把一个目录下的当做一个文件的多个片段集合，所以取了平均，自己做批量推理要另外写一下，比较简单  
+```  
+python run.py --folder {folder_path}  
+```  
+  
 # 论文整理  
 ## 音频+视频VQA  
+### （99pub 荷兰KPN研究所）The influence of video quality on perceived audio quality and vice versa  
+找不到原文了，但是看到被引用  
+主观结论很直接，AV_AQA受视频影响大，但AV_VQA受音频影响小，视频质量主导整体感知的质量  
+  
+### （09.5.3挪威科技大学 早期非常好综述）Perceptual-based quality assessment for audio–visual services A survey  
+覆盖了挺多早期的研究工作，当然内容不深还是比较泛，而且很大篇幅还是在讲对齐、PEAQ一起旧的东西。  
+对AQ、VQ、AVQ关系部分有一些实验结果很值得参考，结论是:  
+  
+音频质量和视频质量都会影响整体的视听质量，且两者相乘与整体质量的相关性最高。  
+一般来说，视频质量决定整体质量，而在编码音频和视频的比特率都很低或视频质量高于某个质量阈值的情况下，音频质量更为重要。随着音频质量的下降，其对整体质量的影响越来越大。此外，对于某些音频明显比视频重要的视听内容或应用，如电话会议、新闻以及音乐视频，音频质量决定整体质量。  
+  
+### （09.10.5德国电信 早期小实验）Audio and video channel impact on perceived audio-visual quality in different interactive contexts  
+做的是VOIP视频会议场景，2个场景（搭乐高视频为主&对话音频为主）分别加视频失真（压缩&丢包）和音频失真（不同编码器&丢包），24个受试者评分。  
+结论也比较粗糙，音频分数很集中，感知不明显，视频质量差异还是能感知出来的。稍微有个可能有点意思的发现是视频为主的视频中出现音频失真，评分仍然会高一些，解释是注意力在视频上；但是反过来不成立，视频失真还是很容易发现，不会因为音频内容为主就忽视。  
+  
+### （11.11.1pub美国电信局 早期优秀线性模型研究）Audiovisual Quality Components  
+整理了之前13项通过线性组合VQA分数+AQA分数得到AVQA分数的模型  
+结论是增加A * V这个交叉项会有用（一般无非也就是加法/乘法模型）  
+提到了之前一半研究认为音视频同等重要，一半研究认为视频更重要，论文中论述认为“如果音视频质量跨度大致相同”，视频质量音频质量同等重要，这个质量跨度就很精髓  
+  
+### （11.11.1美国电信局 支持实验环境影响小）The Influence of Subjects and Environment on Audiovisual Subjective Tests An International Study  
+研究主观实验，结论是大于35个人结果就很稳定了  
+另外语言、地区、光线、噪声、显示器校准等环境因素影响很小  
+可以支持众包主观实验  
+  
+### （14.4.1巴西利亚大学 UnB-AVQ数据集）Full-reference audio-visual video quality metric  
+6个视频，4级视频压缩，3级音频压缩（128 96 48），一共72个退化视频。  
+其实还做了无声单视频压缩的VQA实验一和无视频单音频压缩的AQA实验一，但只有实验三音视频同时压缩并播放的才是AVQA评分（所以还分析了如何用VQA AQA评分去计算AVQA评分）  
+17个受试者，主观实验是双刺激的（但是文章中似乎没有详细描述），有参考视频，所以音频压缩不狠但质量分能拉开差距  
+  
+### （14.12.10pub法国普瓦提埃大学）Influence of video resolution, viewing device and audio quality on perceived multimedia quality for steaming applications  
+分析了分辨率、设备  
+  
+### （15.5.11西安电子科大 加兴趣分预测QoE）QoE Evaluation of Multimedia Services Based on Audiovisual Quality and User Interest  
+对QoE的探讨还挺深的，提的观点是QoE是技术质量感知+内容感兴趣程度  
+主观实验就是让分开打QoE分数和感兴趣分数，就是5个离散级别  
+另外监控了受试者眨眼和眼动数据说可以关联的兴趣分数  
+个人不太认同结论，一方面觉得QoE=技术质量+审美更合适，一方面觉得实验做的也是有点水，结论是否可靠存疑  
+  
+### （17.3.13巴西利亚大学 UnB-AVQ数据集和单模态QA组合方法）Combining audio and video metrics to assess audio-visual quality  
+除了UnB-AVQ数据集，还测试了不同AQA、VQA模型评分使用线性、Minkowski、Power的组合方法得到AVQA分数的效果  
+最优的模型是视频BB+音频RSESQA，三种组合方法差不多，反正都会拿来做baseline模型。  
+代码没找到。  
+  
+### （17.7.25魁北克大学 综述）Audio-Visual Multimedia Quality Assessment A Comprehensive Survey  
+算是最“新”的AVQA综述了，理论基础覆盖的比较多，质量概念、影响因素、现有方法、数据集都介绍了一点。  
+提到音画不同步是个质量劣化的重点问题  
+  
+  
+  
 ### （19.10.24上交LIVE-SJTU数据集）Study of Subjective and Objective Quality Assessment of Audio-Visual Signals  
 可以说是第一个AVQA数据集。CDVL数据集中找到14个参考视频，都是质量很高的，考虑2类x4个级别的视频失真，同时可以搞3个级别的音频压缩失真，所以一共是24种失真，得到336个失真视频。35个受试者（基本是Texas大学的研究生）  
 比对了一些比较直接的方法，包括  
@@ -152,7 +245,25 @@ VQA v2
 * 音频特征提取部分仿照经典VQA指标SSIM、VMAF等转1D做AQA  
 * 神经网络提取视频&音频特征  
   
-其实都是特征提取加回归，主要是特征提取部分换了点方法，还都是比较传统的一些特征，除了最后神经网络。回归头基本都是SVR  
+其实都是特征提取加回归，主要是特征提取部分换了点方法，还都是比较传统的一些特征，除了最后神经网络。回归头基本都是SVR。确实第4种神经网络方法最后经常拿来比较，称为DNFAVQ，虽然是FR模型，但后面同样结构改为NR的变成NR-DNFAVQ，也经常用于比较。  
+代码没找到。  
+  
+做的单刺激主观实验，小的音频差异很难分辨，所以用的是128k 32k 8k，压得非常狠会有差异。另外查到经验值，语音一般24k以下感受到明显差距，音乐是32-48k以下感受到明显差距  
+  
+### （20.2.5都柏林大学 UnB-AVQ 2018数据集）UnB-AV An Audio-Visual Database for Multimedia Quality Research  
+UnB-AVQ 2013数据集的升级版，大大丰富了合成失真，并且是19-68s的较长视频  
+分了3组实验  
+实验具体设计文章中没有提及详情，还需要参考之前关于沉浸式AVQA主观实验的文章  
+第一组60个源视频，仅视频失真，做了压缩、丢包、卡顿各种组合，搞了720个退化版本  
+第二组40个源视频，仅音频失真，做了噪声、削波、回声、斩波？4种失真多个级别，搞了800个退化版本  
+第三组40个原视频，音频+视频失真，做了20种组合，搞了800个退化版本  
+一起是140个原视频，52种失真情况，2320个退化视频  
+  
+问题是还是很难下载，数据集488GB太大了……后续也没看到有文章使用这个数据集  
+  
+### （21.5.3都柏林大学）Perceptual Quality of Audio-Visual Content with Common Video and Audio Degradations  
+这就是UnB-AVQ 2018数据集的实验设计+实验结果分析，挺长的文章，看这个就行  
+结果分析是挺细节的，但是感觉没有什么很宏观通用的结果出来，一分失真类型讨论就适用性少了，只能说不同失真类型、不同语义内容结果不一样。不过还是结论中支持了视觉质量下降对整体质量的影响大于音频失真  
   
   
 ### （21.9.19pub上交）Deep neural networks for full-reference and no-reference audio-visual quality assessment  
@@ -164,30 +275,76 @@ VQA v2
 也是把音频切小片段，测了两种特征提取方法，一是计算频谱图然后用CNN提取特征，二是用个SoundNet 1D卷积网络，反正测出来前一种一般好一点，最后也是过GRU考虑时域。  
 两路获得的特征过MLP给出预测评分。  
 唯一能跑的AVQA数据集就是SJTU-AVQA，之前也没啥厉害的baseline，尤其是NR任务，所以没有很多实验要对比轻松sota，实验部分就自己调调参测试下，做的比较浅。  
-代码未开源。  
+代码其实和下一篇一样，就是加了个ROI。  
   
 ### （22.1.31上交）Attention-guided neural networks for full-reference and no-reference audio-visual quality assessment  
 这篇文章应该说是19年前一篇DNN for FR&NR AVQA的小改进，基本是一样的，实验做的会更完善一些，忽略前一篇看这篇就行。  
 网络结构基本没变，就是视频特征提取加了ROI，本来是随机crop，现在加了一个显著性检测的模型FES可以获得每个帧的显著性map，就会crop其中更重要的一些patch，性能提升了。  
 其他多测了一个UnB-AVC数据集，测了计算效率，这样一些小完善点。  
-代码说开源但是没看到。  
+最终的模型一个音频用ResNet，一个用SoundNet，分别称为DNN-RNT和DNN-SND，也是NR AVQA的经典baseline。  
+代码在https://github.com/charlotte9524/ANNAVQA-pytorch  
+  
+### （22.9.5pub都柏林大学）See hear now: is audio-visual QoE now just a fusion of audio and video metrics?  
+比较简单的Benchmark工作，在之前UnB-AVQ 2018数据集（正好分视频退化、音频退化、音视频退化3个组）上测了几个VQA模型和AQA模型，并且选了最佳的VQA-Nave和AQA-nisqa、Wav2vec做简单后融合，发现AVQA效果也很好（SROCC 0.95+）  
+AVQA太简单了……  
   
 ### （22.10.4上交SJTU-UAV数据集）Subjective and Objective Audio-Visual Quality Assessment for User Generated Content  
 做了SJTU-UAV AVQA数据集，是从YFCC100m 数据集中选的520个视频，21名受试者评分。  
 为了说明这个数据集做的丰富性比较好，对比了另外两个LIVE-SJTU和UnB-AVC数据集，还有VQA的数据集LIVE-VQC，看了5个视频属性+4个音频熟悉，发现SJTU-UAV数据集的分布就比较好一些。  
-也做了个baseline的AVQA模型，基本和之前做的模型一脉相承，改进的点主要在于音频特征提取部分，不再是直接转频谱图输入CNN了，而是提取了色度图、CQT、MFCC 和 GFCC四通道之后再输入一个复杂的CNN（频域、时域、fusion三种不同参数的卷积）。还有就是把之前用的GRU都换成Bi-LSTM了。  
-数据集说开源但是没看到……  
+也做了个baseline的AVQA模型，基本和之前做的模型一脉相承，改进的点主要在于音频特征提取部分，不再是直接转频谱图输入CNN了，而是提取了色度图、CQT、MFCC 和 GFCC四通道之后再输入一个复杂的CNN（频域、时域、fusion三种不同参数的卷积）。还有就是把之前用的GRU都换成Bi-LSTM了。但是好像后面工作没太对比这个，可能指标很高了？  
+数据集和代码在https://github.com/charlotte9524/GeneralAVQA  
+  
+### （23.8.29pub德国国际音频实验室 不同交互形式空间音频）Influence of Multi-Modal Interactive Formats on Subjective Audio Quality and Exploration Behavior  
+测试了纯音频、2D视频+音频、360°头显+音频三种模式下，分别降级音频比特率/空间分辨率的空间音频，测试主观质量的变化  
+大致的结论是三种模式下，对于音频比特率下降的感知是差不多的，但是对空间分辨率下降的感知不一样，戴头显会感知明显一些，毕竟纯音频、2D视频下你放空间音频也没太大用？  
+好像还是挺直观能想到的结论  
   
 ### （23.9.11pub上交SJTU-UAV数据集）Audio-Visual Quality Assessment for User Generated Content Database and Method  
-这篇感觉和22年的SJTU-UAV数据集文章没有啥明显区别，要简短一点。baseline模型用的SVR整合多个特征的更传统的方式。看一篇就行。  
+这篇感觉和22年的SJTU-UAV数据集文章没有啥明显区别，要简短一点。baseline模型用的SVR整合多个特征的更传统的方式，没提GeneralAVQA模型。看一篇就行。  
+  
+### （23.11.25pub 英特尔）The Role of Audio in Visual Perception of Quality  
+目标就是整理关于音视频质量相互作用的内容，挺有参考价值的  
+总结了4个音频影响视频质量的特征：音源位置吸引注意力；音频-视频语义关联性影响视觉注意力；音频音调影响注意力（有点弱，说频率上升暗示向上方）；音乐、音效、旁白增强沉浸感体验。  
+三个实验探究三个问题：  
+实验1 有声视频对比无声视频（应该是AV_VQA对比VQA），非受控环境，单刺激（但是没说是不是同一个人评两个），60人参与。结果是分数相关性r=0.85 (PLCC)很高，但是有声音的得分更好，解释是沉浸感更好，情感更强。有点点合理，支持了AV_VQA被音频影响。  
+实验2 多级压缩音频的VQA（800 320 128 64），受控环境，15人参与感觉比较少。结果是压缩音频的视频MOS和未压缩分数PLCC=0.834很高，虽然音频质量越高AV_VQA分越高，但是分数无明显差异（69.4-71.3）。这个音频64k还是比较高，确实说明无明显失真的话影响不大。做的是AV_VQA，但也侧面支持了音频质量跨度低影响极低。  
+实验3 一些特殊的音频特性影响，同实验2条件。放了单声道、升高/降低音调、不相关音乐……测了MOS和眼动凝视位置，感觉挺奇怪的研究，不是啥靠谱的结论。但是MOS分数上，除了配不一致音乐和高音调明显降低分数之外，其他对质量分数几乎没什么影响，其实也是支持音频只要有就行，但除非明显失真或不一致，音频质量的影响不大。  
+  
+### （24.2.3pub上交 360视频AVQA数据集OAVQAD）Perceptual Quality Assessment of Omnidirectional Audio-Visual Signals  
+做了360全景视频的一个AVQA数据集，自己拍了15个校园场景视频并且做了一些失真得到375个失真视频。  
+方法上测了一些VQA、AQA方法结果点积作为baseline。  
+  
+### （24.3.22都柏林大学 语音视频QoE可解释性的有趣工作 定义对话可解释性）Dialogue Understandability: Why are we streaming movies with subtitles?  
+做可解释性非常值得参考的工作。解释为什么要看带字幕的电影可能原因很多，这里汇总定义了一个对话可解释性的新概念，并且进一步从6个维度尝试量化这个概念，把种种影响因素都考虑到了。  
+提到了语音质量、Speech Intelligibility语音清晰度、响度、语速、说话人身份识别、沉浸程度等都是和对话可解释性相关的。  
+  
+### （24.6.13上交 扩展360视频AVQA数据集OAVQAD+）Subjective and Objective Audio-Visual Quality Assessment for Omnidirectional Videos  
+扩展了之前OAVQAD数据集，合成失真方法没变，加了数量做了25个原视频，625个失真视频，22个受试者略少  
+还做了个模型，拼了之前做过的一些AVQA模型，视频encoder（CNN+空间注意力+GRU）+音频encoder（CNN+GRU）+运动encoder（3D-CNN），特征concate之后过MLP。还做了个增强变体是加了CNN分层特征融合  
   
 ### （24.7.29上交）UNQA Unified no-reference quality assessment for audio, image, video, and audio-visual content  
 图像IQA、视频VQA、音频AQA、音视频AVQA四种不同的QA数据集按说要训练四类不同的模型来评分，这篇文章中尝试做了一个统一的模型，根据输入的模态给出不同的评分  
-还有一个问题是，即使是同一种模态的数据集之间也是没法互通的，因为绝对评分标准也不一样。但是我们认为其相对排序一样就可以做  
+还有一个问题是，即使是同一种模态的数据集之间也是没法互通的，因为绝对评分标准也不一样。但是我们认为其相对排序一样就可以做，这样就可以多数据集联合训练，大大提升训练集丰富度。  
+模型还是比较传统的，三路特征提取分别提取图像空间特征、视频运动特征、音频特征，然后根据目标是IQA、VQA、AQA、AVQA组合特征选用，再训练回归头。  
+训练分三个阶段（这里没太看懂），一阶段预训练特征提取器，二阶段加入模态回归头一起训练，三阶段微调回归头。  
+指标应该是SOTA，在SJTU这种UGC数据集上跑了SROCC 0.8301很高了。  
+代码没开源。  
   
 ### （24.12.25pub哈工大）Enhancing No-Reference Audio-Visual Quality Assessment via Joint Cross-Attention Fusion  
 就是CNN提取视频、音频特征后，用的注意力机制的网络做的特征融合，再过MLP，感觉思路挺直接的。  
 只是说数据集也只有LIVE-SJTU、UnB-AVC这种几百数据量级的，上注意力的意义也就那样……数据集限制做不了太多了。  
+代码没开源。  
+  
+### （25.1.30上交 MLLM做VTA任务QA）AGAV-Rater Adapting Large Multimodal Model for AI-Generated Audio-Visual Quality Assessment  
+任务是比较特殊的视频生成音频任务VTA的AGAVQA任务，规模做的不错，386个AIGC视频，用了8种不同的VTA方法得到了3088个AGAV视频，都做了主观实验，评分有三个维度：生成音频评分、音视频一致性评分、音视频整体质量评分  
+测试了主流的AVLMM、AQA模型、AV对齐模型、AVQA模型，实验做的也挺多，很值得参考。  
+说开源数据集和模型但是目前还没看到。  
+  
+### （25.6.12中传 UGC全景视频AVQA数据集）Research on Audio-Visual Quality Assessment Dataset and Method for User-Generated Omnidirectional Video  
+完全学生自己拍的全景视频组成的UGC 全景视频AVQA数据集，5个同学拿2台Insta360相机拍了300个视频覆盖10个场景，不愧是中传  
+主观实验也有136人参与，每个视频至少18个人。  
+做了个不算复杂的Baseline，视频encoder用的之前一个CIQNet，音频encoder是VGGish，然后注意力块做特征融合。  
+这里就存在UGC AVQA是否音频影响小的问题，看对比实验和消融实验，答案是肯定的，加了音频特征SROCC从0.8跑到0.82，VQA模型也能跑出0.8，还没测Q-Align这种SOTA  
   
 # 相关论文整理  
 ## 音频AQA  
@@ -258,4 +415,20 @@ TODO：训练方法上还挺多内容的
 主要是做的数据集很棒，从YouTube AudioSet 200w视频中选了100w可以用的，全部标记了视频摘要标签，并且是包含对于音频内容描述的。对比之前一些大的VAT数据集，例如HowTo100M、HD_VILA_100M、WebVid-2.5M，这些数据集确实有视频、音频、文本三模态，但是相关性没有那么好，例如文本只是转录的语音文本而非画面信息，文本光描述了画面但是没有提到音频，这样就无法实现很好的三模态对齐。  
 文章中整理了经典的视频多模态预训练数据集还有下游任务的一些测试数据集可以参考。  
 做了个作为baseline的三模态大模型，由视频、音频、文本三个编码器以及一个多模态decoder（用于文本生成）组成。视频编码器说CLIP和Video Swin Transformer都测了；文本编码器是BERT；音频编码器是AudioSet上预训练的Audio Spectrogram Transformer。三个模态encoder各自提取的特征要过三个各自的线性投影层去放到同一空间对齐，做特征对齐的时候考虑以文本为核心，对齐了T-A T-V T-AV，对齐的时候需要考虑全局特征投影而不是局部特征（视频帧、音频片段），所以还有全局池化啥的。  
-因为还可能做文本生成的下游任务，所以预训练不仅仅只是搞对齐，不然只能拿到三个encoder做一些检索任务。还做了Captioning的预训练任务来训练一个多模态decoder，mask掉一部分视频caption，从而使得decoder可以文本生成。
+因为还可能做文本生成的下游任务，所以预训练不仅仅只是搞对齐，不然只能拿到三个encoder做一些检索任务。还做了Captioning的预训练任务来训练一个多模态decoder，mask掉一部分视频caption，从而使得decoder可以文本生成。  
+  
+### （23.5.25剑桥大学）PandaGPT: One Model To Instruction-Follow Them All  
+结合了ImageBind的多模态编码器（支持六种模态）和 Vicuna 的大型语言模型，通过微调投影层以及LoRA参数的方法，仅仅通过图像-文本对训练，就支持了一定多模态理解的能力  
+  
+### （23.9.11NUS）NExT-GPT: Any-to-Any Multimodal LLM  
+任意模态输入到任意模态生成的模型架构，思路倒是很简单，就是冻结中间的LLM，用大量数据训练输入不同模态的projector和输出不同模态的projector（再接扩散模型就可以生成）  
+  
+### （24.6.11阿里）VideoLLaMA 2: Advancing Spatial-Temporal Modeling and Audio Understanding in Video-LLMs  
+视频、音频多模态理解模型，在前代模型的基础上重新设计了视频编码器，并且增强了音频理解的联合训练  
+  
+  
+### （25.1.21南京大学）VITA-1.5: Towards GPT-4o Level Real-Time Vision and Speech Interaction  
+视频、语音多模态理解模型，支持强大的语音交互功能，具有很好的实时性  
+  
+### （25.8.11TUM 大模型AV分类任务数据集）VGGSounder Audio-Visual Evaluations for Foundation Models  
+有经典的AV分类任务数据集VGGSound，但是只有单一类别标签，这里选取了一部分VGGSound子集，众包增加了很多类别标签，实现了多分类，并且可以区分是视觉内容分类、听觉内容分类还是视听内容分类。这个数据集就可以用来做AV基础模型的Benchmark

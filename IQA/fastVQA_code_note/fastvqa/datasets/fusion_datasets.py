@@ -36,6 +36,26 @@ def get_spatial_fragments(
     fallback_type="upsample",
     **kwargs,
 ):
+    """
+    video: 输入视频张量，格式默认为 [C, T, H, W]
+           - C：通道数（一般是3通道RGB）
+           - T：时间维度（帧数）
+           - H、W：空间分辨率（高、宽）
+    fragments_h, fragments_w: 期望在垂直和水平方向将图像网格划分多少段（行、列）。
+                             例如 fragments_h=7 表示把高度方向分成7格，fragments_w=7 表示宽度方向分成7格。
+    fsize_h, fsize_w: 每个网格碎片（fragment）的最终裁剪大小（高、宽）。
+                      最终整体拼接的目标高宽 = fragments_h * fsize_h, fragments_w * fsize_w。
+    aligned: 时间维度上对齐的大小（一般是 32）。函数里会把时间维度（T）按 aligned 大小分段处理，
+             例如 T=96 且 aligned=32，会把帧序号分为 [0:32], [32:64], [64:96] 三个对齐分段。
+    nfrags: 通常是“需要采样（或拼接）多少个碎片”的数量，函数里你传了默认=1，实际大部分逻辑并未显式使用这个参数。
+    random: 是否在“全图范围”（而不只是网格内部）进行随机裁剪。如果为 True，会在整个高、宽里随机取裁剪区域（已弃用）。
+            如果为 False，则在每个网格对应的局部范围内进行随机偏移。
+    random_upsample: 是否再做一次“随机上采样”。如果为 True，会在函数里用 `random.random()` 生成一个倍数，对视频做一次随机比例放大。
+    fallback_type: 当输入视频分辨率不够时，用什么方式“补足”到目标分辨率：
+                   - "upsample"：直接插值上采样（最常见）
+                   - 你还可以实现其他策略（不过这里只给了 upsample）。
+    """
+    # renyu: 这是把网格碎片的大小（fsize_h, fsize_w）和碎片数（fragments_h, fragments_w）相乘，得到目标拼接后的整体高度/宽度。
     size_h = fragments_h * fsize_h
     size_w = fragments_w * fsize_w
     ## video: [C,T,H,W]
@@ -43,6 +63,7 @@ def get_spatial_fragments(
     if video.shape[1] == 1:
         aligned = 1
 
+    # renyu: 分别是视频张量的帧数 (T)、当前视频的实际高度 (H)、实际宽度 (W)，通道数忽略
     dur_t, res_h, res_w = video.shape[-3:]
     ratio = min(res_h / size_h, res_w / size_w)
     if fallback_type == "upsample" and ratio < 1:
@@ -53,6 +74,7 @@ def get_spatial_fragments(
         )
         video = (video * 255.0).type_as(ovideo)
         
+    # renyu: 新加的随机上采样处理，算是一种数据增强？
     if random_upsample:
 
         randratio = random.random() * 0.5 + 1
@@ -67,14 +89,17 @@ def get_spatial_fragments(
     size = size_h, size_w
 
     ## make sure that sampling will not run out of the picture
+    # renyu: 记录每一个网格（行/列）的起始坐标
     hgrids = torch.LongTensor(
         [min(res_h // fragments_h * i, res_h - fsize_h) for i in range(fragments_h)]
     )
     wgrids = torch.LongTensor(
         [min(res_w // fragments_w * i, res_w - fsize_w) for i in range(fragments_w)]
     )
+    # renyu: 表示每个网格在原图里“应占用”的高度/宽度。用于后面配合 rnd_h、rnd_w 进行偏移
     hlength, wlength = res_h // fragments_h, res_w // fragments_w
 
+    # renyu: 实现随机采样的代码，if random分支处理有点不对，是随机偏移量在整个图像内动，废弃了，后面改为在网格内部随机动
     if random:
         print("This part is deprecated. Please remind that.")
         if res_h > fsize_h:
@@ -89,6 +114,18 @@ def get_spatial_fragments(
             )
         else:
             rnd_w = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned)).int()
+    '''
+    # renyu: 修改版代码，用于测试时固定裁剪网格左上角，稳定结果
+    elif fix_sample:
+        if hlength > fsize_h:
+            rnd_h = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned), dtype=torch.int)
+        else:
+            rnd_h = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned), dtype=torch.int)
+        if wlength > fsize_w:
+            rnd_w = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned), dtype=torch.int)
+        else:
+            rnd_w = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned), dtype=torch.int)
+    '''
     else:
         if hlength > fsize_h:
             rnd_h = torch.randint(
