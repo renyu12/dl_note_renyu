@@ -115,6 +115,7 @@ UGC视频有语音、音乐、环境音，还有一些复杂的情况如特效�
 | SJTU-UAV | 520 | 520 | 野外 | 960×720-1920×1080 | 8秒 |  
 | LIVE-SJTU | 14 | 336 | 视频压缩、音频压缩 | 1920×1080 | 8秒 |  
 | UnB-AVC | 6 | 72 | 视频压缩、音频压缩 | 1280×720 | 8秒 |  
+  
 不过早期也有一些，例如INRS数据集等，都是参考视频很少，做了多级音视频失真的FR AVQA数据集  
 UnB-AVC 2018比较大，较难下载  
 ## 一些音频相关任务  
@@ -338,7 +339,7 @@ AVQA太简单了……
 ### （25.1.30上交 MLLM做VTA任务QA）AGAV-Rater Adapting Large Multimodal Model for AI-Generated Audio-Visual Quality Assessment  
 任务是比较特殊的视频生成音频任务VTA的AGAVQA任务，规模做的不错，386个AIGC视频，用了8种不同的VTA方法得到了3088个AGAV视频，都做了主观实验，评分有三个维度：生成音频评分、音视频一致性评分、音视频整体质量评分  
 测试了主流的AVLMM、AQA模型、AV对齐模型、AVQA模型，实验做的也挺多，很值得参考。  
-说开源数据集和模型但是目前还没看到。  
+数据集和模型在https://github.com/charlotte9524/AGAV-Rater  
   
 ### （25.6.12中传 UGC全景视频AVQA数据集）Research on Audio-Visual Quality Assessment Dataset and Method for User-Generated Omnidirectional Video  
 完全学生自己拍的全景视频组成的UGC 全景视频AVQA数据集，5个同学拿2台Insta360相机拍了300个视频覆盖10个场景，不愧是中传  
