@@ -46,6 +46,7 @@ OpenAI Sora（2024）Kling（2024–2025）Runway Gen-2.5 / Gen-3（2024–2025�
 长视频叙事连贯性  
   
 # 商业模型使用  
+可以查查关于各个制作团队的一些模型选择的分享，Artificial Analysis等网站还有一些模型的技术分排名  
 ## 流水线概述  
 ### 剧本  
 现在已经完全可以个人制作完整、高质量的AIGC短片。由于AIGC视频还只是比较短的镜头，所以“拍摄”流程肯定不是长镜头的处理，而是前期先完整规划好剧本、人物设定、分镜再制作。  
@@ -156,25 +157,57 @@ He Kaiming团队备受关注的工作，思路是亮点，验证了扩散模型�
   
   
 ## VTA  
-    SpecVQGAN  
-    ReWaS  
-    Seeing&Hearing   
-    VATT  
-    Diff-Foley  
+TODO：  
     VTA-LDM  
     V-AURA  
-    Frieren  
-    MM-Diffusion（T2AV）  
-    MM-LDM（T2AV）  
-    JavisDiT（T2AV）  
-    AV-DiT（T2AV）  
-    MMDisCo（T2AV）  
-    UniForm（T2AV）  
+    MM-LDM  
+    MMDisCo  
+    JavisDiT++  
+    SkyReels-v4  
+### （21.10.17芬兰坦佩雷大学 VTA模型 SpecVQGAN）Taming Visually Guided Sound Generation  
+非常早期工作，还是GAN的结构，忽略吧  
+      
+### （22.11.7以色列希伯来大学 Im2Wav）I Hear Your True Colors: Image Guided Audio Generation  
+非常早期工作，不是VTA是ITA，不过也是会作为baseline提一下  
+  
+### （22.12.19人大北大-微软 T2AV模型）MM-Diffusion: Learning Multi-Modal Diffusion Models for Joint Audio and Video Generatio  
+早期T2AV的经典工作，还是用的UNet而不是DiT或者audio token自回归，做了音视频两个UNet结合联合生成的设计，确实跑起来了。  
+不过和25年下半年爆发的AV联合生成模型相比还是太早了，忽略吧  
+  
+### （23.6.29清华大学 VTA模型）Diff-Foley: Synchronized Video-to-Audio Synthesis with Latent Diffusion Models  
+早期经典的VTA工作，应该是第一个把diffusion开始用于VTA任务，性能其实应该不咋地，新一点的工作不会再比较这个了，但是相比之前的SpecVQGAN和Im2Wav还是性能大大提升了，相当于把这个已经沉寂的研究方向重新拉起了  
+另外也正式提出了关键挑战是时域同步和语义相关，已经在尝试用特征对齐来解决，第一步使用对比学习的音视频特征预训练（称为CAVP），损失函数设计考虑了语义和时间两方面。然后第二步使用扩散模型的时候，CAVP encoder出来的视频特征作为condition输入（我其实有点没理解，这样就能认为视频特征中包含对齐的音频信息了吗？好像也没有使用到对齐的音频特征）  
+还有另外两个小的创新点，一个是数据增强，数据不够就随机切不同时长的视频片段；一个是扩散模型引导CFG+CG融合了，CFG做语义，CG做时间同步。  
+Metrics也很有意思，除了用Inception Score、FID、Mean KL散度这些SpecVQGAN中用的，因为这个时候还没有视听一致性的Metrics，所以这里自己训练了一个分类器，50%是匹配的AV序列输出1，25%是有时移的，25%是不匹配的，都输出0，然后用预测的1占比作为准确度  
+  
 ### （23.8.18悉尼大学 VTA模型）V2A-Mapper: A Lightweight Solution for Vision-to-Audio Generation by Connecting Foundation Models  
 VTA中期研究时期一个可行的简单思路，尽量复用现有视频Encoder和音频生成模型，只训练一个视频latent到音频latent的映射模块。  
 CLIP (视觉表征基础模型) -> V2A Mapper（唯一训练模块）-> CLAP embedding（和Prompt文本等价的输入） -> AudioLDM（经典T2A音频生成基础模型）  
 理论上训练所需的数据量没那么大，论文中只用了VGGSound。  
 代码没开源。  
+  
+### （23.9.19Meta VTA模型）FoleyGen: Visually-Guided Audio Generation  
+早期VTA工作，尝试的思路是基于Audio LM做生成（把音频用类似文本的处理，转为token然后生成下一个token，再decode回去），视频特征加入作为condition，应该不是很好的技术路线，后面都是diffusion模型了，这个比V2A-Mapper引用还低。所以虽然是Meta发布，但后面很少被提到，影响力较小  
+Metrics也是早期FVD、KL，不过似乎是首次将ImageBind余弦相似度拿来做视听一致性Metrics的尝试，也没有做很多解释，就说了可以表示一致性。  
+另外也做了主观实验打整体质量分数、内容相关性分数、时间一致性分数，这也是和我们的思路很一致了  
+  
+### （24.2.27港科大 多功能AV生成模型）Seeing and Hearing: Open-domain Visual-Audio Generation with Diffusion Latent Aligners  
+很有意思的工作，根本没有训练模型，提出了一个聪明的工程做法，直接复用T2V和T2A diffusion模型，然后用ImageBind Embedding来指导同时生成。  
+具体做法应该是扩散模型生成音频和视频latent的时候，每一步会decode出来一下当前的音视频，然后转ImageBind embedding来分析余弦相似度，这个结果再用于diffusion sampling过程中latent更新的损失函数，也就是扩散过程中要对齐ImageBind相似度  
+这个工作应该算是把ImageBind至少在评估侧的地位确立了，虽然实际效果不好，毕竟只能整体语义对齐。  
+  
+  
+### （24.6.1浙大 VTA模型）Frieren: Efficient Video-to-Audio Generation Network with Rectified Flow Matching  
+这个工作偏扩散模型底层一些，是基于Rectified Flow Matching来做VTA，并且在音视频同步上也做了比较多的channel-level扩模态融合的设计。  
+Rectified Flow Matching这个我不太懂，有机会看下数学细节，大致是Flow Matching的一种变体，路径会接近直线，提升生成效率，所以Frieren模型的生成速度是更快的。我研究了下说这个和SD3的Flow Matching training还不一样，SD3只是训练loss使用flow matching，Frieren是纯flow generative模型，基于求解ODE方程不走扩散。好像还是挺硬核的。  
+不过这个工作仍然显得比较特殊，后续的工作依然还还是走的基于主流DiT去魔改的路线，没有走这个Flow Matching模型的路线。  
+Metrics也用了Diff-Foley的ACC Align模型，并且在AMT上做了众包主观实验打音频分和内容一致性分数，附录里还给了点介绍。不过应该是做的很简单，就是一个音频6个人打分，时薪8美金，然后是1-5分段，0.5步长选一个，这是个扩大规模的好做法。  
+  
+### （24.6.11多伦多大学 T2AV模型）AV-DiT: Efficient Audio-Visual Diffusion Transformer for Joint Audio and Video Generation  
+第一个基于DiT的联合AV生成模型。可以直接从图像DiT扩展到音频生成是很强的工程Insight。  
+模型设计上应该还是基于图像DiT去修改，尽量少做改动，更多是偏adapter的设计，时域adapter使得图像DiT可以处理视频，音频adapter使得图像DiT可以处理音频，Fusion Adapter使得音视频可以相互作用（用的联合起来自注意力而不是交叉注意力，说参数更少一些）。训练的时候也是冻结了很多预训练的图像DiT模块。不过我看了下具体结构图，感觉设计还是有点点复杂的，音视频的2个分支是有差异的，然后有些交互。  
+Metrics用的很传统的做法，值得考虑下。只考虑了视频和音频质量，并且是通过latent特征分布来分析的，在Benchmark数据集上分析视频的FVD、KVD，音频的FAD，都是分布指标。（这些指标应该新的工作中不再使用了）  
+早期工作没有特别做显式的视听同步，所以效果也是没那么好的。  
   
 ### （24.6.17ElevenLabs）VTA API  
 ElevenLabs是在做AI语音方向很强的一家公司，主要的业务还是  
@@ -190,6 +223,15 @@ https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/sound-effec
 语义分支是和文本Prompt分支交叉注意力融合在一起注入U-Net各层的，时间分支特别一点，加到U-Net的feature map中（说类似ControlNet的思路）。  
 具体实现和训练感觉是比较复杂的，论文中汇报比V2A-Mapper有提升，但是也看到后续论文如AudioGen-Omni显示没提升。我理解复用T2A确实不是最优的方案，文本对于空间、时间同步的控制很有限。  
   
+### （24.7.8韩国NAVER实验室 ReWaS）Read, Watch and Scream! Sound Generation from Text and Video  
+TODO: 走的不太主流的技术路线：T2A模型通过Video做条件，但是条件用的很有思路，考虑了时间维度的能量变化，应该是个挺有意思的工作  
+Metrics也没啥特别的，对比Seeing&Hearing性能有所提升（估计比不过主流路线的工作）  
+  
+### （24.11.8华盛顿大学 VTA模型 VATT）Tell What You Hear From What You See -- Video to Audio Generation Through Text  
+主要做的是TVTA，也就是支持VTA的时候可选文本condition  
+做法大致是一阶段先训练用一个LLM可以输入视频生成可能的音频Caption，二阶段就使用这个LLM生成audio token（或者使用自己定义的文本Prompt转audio token），输入AudioLM生成音频，感觉有点V->T->A的意思，虽然不是显式的，也不是主流路线，效果应该不行。  
+Metrics中视听一致性用的同diff-foley的Align Acc指标。  
+  
 ### （24.12.19UIUC VTA模型）MMAudio: Taming Multimodal Joint Training for High-Quality Video-to-Audio Synthesis  
 VTA现在三模态联合训练范式的经典工作，github 2k+星，工程化实现做的很不错。  
 之前最经典的VTA模型训练分两种范式，一是只用视频&音频两个模态，从头开始训练，但是因为视听数据集太少（不是随便视频数据集就可以，VTA主要是配sound，但是实际的数据集中大量的是speech和music，还有很多后期额外声音，导致没法直接用）；二是更主流的，用TTA的模型（数据集很多）再额外用视听数据集训练控制模块，网络会比较复杂（说的就是FoleyCrafter！），性能没有三模态好。  
@@ -198,6 +240,15 @@ VTA现在三模态联合训练范式的经典工作，github 2k+星，工程化�
 损失函数就是Conditional Flow Matching。  
 但是直接这样训练是做不好时间对齐的，这也是VTA的难点所在，论文中也是做了比较好的设计，做了个条件同步模块，引入了frame-level conditioning，使用了SynchFormer特征，会把音频事件和具体哪一帧对应。  
   
+### （25.2.6中国电信 多功能AV生成模型）UniForm: A Unified Multi-Task Diffusion Transformer for Audio-Video Generation  
+好像不是很强的工作，算是早期T2A+A2V+T2AV多功能的工作，主要的贡献就是实现一个模型多任务，原理是通过不同的噪声输入，配合不同的任务Embedding（类似CLS加一个额外的token标记是VTA、ATV还是T2AV）。效果说对比各自单任务模型效果都还是不错的，但是可能没有其他创新性的设计，影响力较小。  
+做了个demo页面但是没有开源代码https://uniform-t2av.github.io/  
+  
+  
+### （25.3.30浙大 T2AV模型）JavisDiT: Joint Audio-Video Diffusion Transformer with Hierarchical Spatio-Temporal Prior Synchronization  
+主要做的是改进的DiT模型，设计了新的DiT block中，使用时空自注意力、粗粒度交叉注意力、细粒度交叉注意力、音视频双向注意力和FFN层  
+做了一个新的Metrics叫做JavisScore，不是直接用整段的语义一致性，而是切重叠2s小段，算ImageBind相似度，并且只取其中40%最不同步的帧，认为这样的方式会更符合主观感知，明显不同不变的片段影响很大，不要被大部分同步部分给平均弱化了。这个思路很好。  
+还做了一个10140个多样化视频的Benchmark，JavisBench。（我有点不太理解，T2AV模型建个Benchmark也没啥用，还是一些NR指标，只是可以把Prompt/Caption分类了）  
   
 ### （25.6.24快手 VTA模型）Kling-Foley: Multimodal Diffusion Transformer for High-Quality Video-to-Audio Generation  
 是一个集大成的拼装模型，稍有点复杂。主要是基于SD3和MMAudio的工作去优化。  
@@ -300,11 +351,41 @@ Local模块做短时间对齐，Global模块做整体语义对齐
 这个是个挺创新的点，想到从改进CFG的角度来增强AV同步。实现也很简单，就是不再是作差有文本Prompt和空文本Prompt两种情况，而是作差Joint AV和单模态输入AV生成两种情况，很合理，语义Prompt不再是guidance的方向了  
 不过说是开源，看github仓库里一直都还没上传模型和代码，需要观望。  
   
+### （25.12.15字节 多功能AV生成模型）Seedance 1.5 pro: A Native Audio-Visual Joint Generation Foundation Model  
+这个技术报告发布时间也是25年底了，可能和Seedance2会比较接近。  
+做的多任务，主要是T/I/V/AV输入都可以获得AV输出。  
+模型结构没有细致描述，说基于MMDiT的结构，应该没有太大改动的处理，大部分篇幅还是在介绍思路和评测结果  
+训练部分的思路也是多阶段渐进式的，先做T2V和T2A，然后再T2AV，最后还有AV2AV（编辑），这样会比较稳定。训练数据集情况也没有详细介绍，只是说建立了数据pipeline然后获取了高质量的AV数据。  
+评估部分做的是很完整的，搞了配套的SeedVideoBench-1.5评估框架，非常值得借鉴：  
+TODO  
+* 视频：motion质量（分为人物动作和镜头运动），Prompt following，视觉审美？  
+* 音频：Prompt following，声学质量，音画同步，audio expressive（这个感觉和我提的语义一致性比较接近，包括BGM适配性、语音的情感&语调，音频沉浸感和连贯性等）  
+  
+但是我不知道这么多维度的指标具体是怎么做的？  
+还有主观实验评价，除了做1-5绝对评分，也用了双刺激的比较实验，分GSB（更好-一样-更差），比AB Preference可能更合理，不过也会有大量的same。  
+测试结果比较诚实，很多分数不如veo 3.1都说了，kling也很强，但是会分一些具体场景分析，说明中文对话、复杂镜头、歌剧等场景有突出优势  
+  
 ### （26.1.6lightricks T2AV模型）LTX-2: Efficient Joint Audio-Visual Foundation Model  
 和Harmony是同期同类型工作，但是看起来好像差别挺大的。LTX-2感觉更偏工程落地的模型设计，Harmony的改动点novelty更大。不过LTX-2是工业界开源，有不少star，社区讨论度也更高，实用性更好的。  
 创新点说是AV joint generative backbone这个似乎看到Harmony已经不新了，音视频latent分开我觉得也是很直接的思路（咋能不分开呢？好像很早期工作有吧），没啥特别的，不过强调了视频更复杂，所以视频分支做的更复杂，音频分支更轻量。  
 网络结构上设计应该是比较好的，全层级 AV Cross-Attention 耦合。也重新设计了CFG（可能和Harmony思路差不多？）。  
 真正强的点在于efficient，对比WAN推理速度加速18x，推理加速做了非常多优化可以学习，不愧是工业界出品。  
   
-### MOVA  
-TODO：论文还没发
+### （26.1.7快手 多功能AV生成模型）Apollo: Unified Multi-Task Audio-Video Joint Generation  
+最开始26.1.7发的一版主体是Kling团队，然后命名是Klear，但是26.1.13重新上传了一版，移除了一个作者也删去了Kling团队标识，更名为Apollo，可能是涉及到一些内部问题吧  
+似乎是没有开源  
+做的模型是多任务的，支持文本和图像的输入，T2AV、TI2AV、T2V、T2A、TI2V都可以做  
+认为AV联合生成中音画不同步、单模态生成质量下降的问题和模型结构、训练方法、数据规模有关，所以三方面都有创新：  
+（1）模型结构上认为Single Tower是优于Dul Tower的，也就是音视频token是输入同一个MM-DiT Transformer的，这样注意力可以同时覆盖音视频token和各自的caption token，比双分支做一些交叉注意力能实现更强的Interaction和synchronization  
+（2）训练方法上认为只训练T2AV任务不够，各种生成任务要一起来，随机mask掉音视频的token，这样训练出的模型不光能做多任务而且效果更好  
+（3）训练数据集上，构建了一个81M的数据集（未公开），有自动化筛选的pipeline保证数据质量，用大模型来标注caption  
+Metrics上是音视频质量、TTS质量还有视听一致性，其中视听一致性使用SynchFormer、SyncNet和IB-Score  
+说性能是优于UniVerse-1、Ovi、JavisDiT，接近Veo-3的  
+  
+### （26.2.9OpenMOSS IT2AV模型）MOVA: Towards Scalable and Synchronized Video-Audio Generation  
+能拿出来开源的AV联合生成模型，看开源仓库做的非常好。  
+https://github.com/OpenMOSS/MOVA  
+做的主要是IT2AV任务，其中T是辅助控制的，没有去做多任务。  
+经典音视频dual tower结构，并且基于两个预训练模型降低训练量：视频是WAN2.2 I2V 14B模型，音频是1.3B的T2A Diffusion模型，两个分支通过交叉注意力bridge模块连接。有一个比较重要的改进点是特征输入时时间对齐，考虑到音频token密集，视频token稀疏，为了交互时更好对齐，使用了RoPE positional encoding，时间对齐之后再做  
+评估工作做的很不错，虽然客观指标还是IB DeSync LSE-D LSE-C这一套，但是作者直接指出当前objective metrics很大局限，所以做了Arene-based主观实验（类似Chatbot Arena评测，让人来做两两比较的投票，A/B preference，ChatGPT常用），相同输入的4个模型结果两两随机对比，最后收集了5000+投片，确认  
+性能不错，测试优于LTX-2、Ovi和WAN2.1+MMAudio。并且这种评估最后还可以按国际象棋类似算法给出ELO量化评分。这个方法很有意思值得借鉴。
